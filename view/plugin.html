@@ -108,10 +108,9 @@
             <div class="control-label">Mix S/N</div>
             <canvas class="control-canvas" id="osc3NoiseAmount-canvas"></canvas>
           </div>
-          <div class="control-group vertical noise-type-group">
-            <button class="control-button noise-type-btn" id="osc3NoiseType-white-button">white</button>
-            <button class="control-button noise-type-btn" id="osc3NoiseType-pink-button">pink</button>
-            <button class="control-button noise-type-btn" id="osc3NoiseType-brown-button">brown</button>
+          <div class="control">
+            <div class="control-label">Noise</div>
+            <button class="control-button" id="osc3NoiseType-button">White</button>
           </div>
         </div>
         <div class="control-group horizontal">
@@ -147,20 +146,22 @@
       <div class="module-content">
         <canvas class="visualization-canvas" id="filter-visualization-canvas"></canvas>
         <div class="control-group horizontal">
-          <div class="control small">
-            <div class="control-label">Type</div>
+          <div class="control horizontal-label">
+            <span class="control-label">Type</span>
             <select id="filterTypeSelect" class="filter-type-select">
               <option value="0" selected>Low Pass</option>
               <option value="1">High Pass</option>
             </select>
           </div>
-          <div class="control small">
+        </div>      
+        <div class="control-group horizontal">
+          <div class="control">
             <div class="control-label">Cutoff</div>
-            <canvas class="control-canvas small" id="filterCutoff-canvas"></canvas>
+            <canvas class="control-canvas" id="filterCutoff-canvas"></canvas>
           </div>
-          <div class="control small">
+          <div class="control">
             <div class="control-label">Resonance</div>
-            <canvas class="control-canvas small" id="filterResonance-canvas"></canvas>
+            <canvas class="control-canvas" id="filterResonance-canvas"></canvas>
           </div>
         </div>
       </div>
@@ -235,21 +236,21 @@
           </div>
         </div>
         <div class="control-group horizontal">
-          <div class="control small">
+          <div class="control">
             <div class="control-label">Attack</div>
-            <canvas class="control-canvas small" id="envAttack-canvas"></canvas>
+            <canvas class="control-canvas" id="envAttack-canvas"></canvas>
           </div>
-          <div class="control small">
+          <div class="control">
             <div class="control-label">Decay</div>
-            <canvas class="control-canvas small" id="envDecay-canvas"></canvas>
+            <canvas class="control-canvas" id="envDecay-canvas"></canvas>
           </div>
-          <div class="control small">
+          <div class="control">
             <div class="control-label">Sustain</div>
-            <canvas class="control-canvas small" id="envSustain-canvas"></canvas>
+            <canvas class="control-canvas" id="envSustain-canvas"></canvas>
           </div>
-          <div class="control small">
+          <div class="control">
             <div class="control-label">Release</div>
-            <canvas class="control-canvas small" id="envRelease-canvas"></canvas>
+            <canvas class="control-canvas" id="envRelease-canvas"></canvas>
           </div>
         </div>
       </div>
@@ -268,7 +269,7 @@
       <div class="module-content">
         <canvas class="visualization-canvas" id="lfo-canvas"></canvas>
         <div class="control-group horizontal">
-          <div class="control small">
+          <div class="control">
             <div class="control-label">WaveShape</div>
             <select id="lfoWaveShape-select" class="lfo-waveshape-select">
               <option value="0">Sine</option>
@@ -279,13 +280,13 @@
               <option value="5">Random</option>
             </select>
           </div>
-          <div class="control small">
+          <div class="control">
             <div class="control-label">Rate</div>
-            <canvas class="control-canvas small" id="lfoRate-canvas"></canvas>
+            <canvas class="control-canvas" id="lfoRate-canvas"></canvas>
           </div>
-          <div class="control small">
+          <div class="control">
             <div class="control-label">Ramp</div>
-            <canvas class="control-canvas small" id="lfoRamp-canvas"></canvas>
+            <canvas class="control-canvas" id="lfoRamp-canvas"></canvas>
           </div>
         </div>
       </div>

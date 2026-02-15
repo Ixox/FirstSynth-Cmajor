@@ -190,8 +190,8 @@ class test_View extends HTMLElement
         this.initSaturationTypeButton('osc2SaturationType');
         this.initSaturationTypeButton('osc3SaturationType');
 
-        // Initialize noise type buttons
-        this.initNoiseTypeButtons();
+        // Initialize noise type button
+        this.initNoiseTypeButton();
 
         // Initialize Filter Type
         this.initFilterTypeSelect();
@@ -233,7 +233,7 @@ class test_View extends HTMLElement
         this.patchConnection.requestStoredStateValue("row0");
         this.patchConnection.requestStoredStateValue("row3");
 
-        console.log("============================= connectedCallback done =============================");
+        console.log("============================ connectedCallback done =============================");
     }
 
     initEnvelopeSelector()
@@ -457,7 +457,7 @@ class test_View extends HTMLElement
     initSaturationTypeButton(paramId)
     {
         const button = this.querySelector(`#${paramId}-button`);
-        const typeNames = ['No', 'Tube', 'Clip', 'Wave'];
+        const typeNames = [' No ', 'Tube', 'Clip', 'Wave'];
         let currentType = 0;
 
         const updateButtonText = (type) => {
@@ -479,42 +479,29 @@ class test_View extends HTMLElement
         this.patchConnection.requestParameterValue(paramId);
     }
 
-    initNoiseTypeButtons()
+    initNoiseTypeButton()
     {
-        const buttons = [
-            { selector: '#osc3NoiseType-white-button', type: 0, label: 'white' },
-            { selector: '#osc3NoiseType-pink-button', type: 1, label: 'pink' },
-            { selector: '#osc3NoiseType-brown-button', type: 2, label: 'brown' }
-        ];
-
+        const button = this.querySelector('#osc3NoiseType-button');
+        const typeNames = ['White', 'Pink', 'Brown'];
         let currentType = 0;
 
-        buttons.forEach(btnInfo => {
-            const button = this.querySelector(btnInfo.selector);
-            
-            button.addEventListener('click', () => {
-                currentType = btnInfo.type;
-                this.updateNoiseTypeButtonStates(currentType, buttons);
-                this.patchConnection.sendEventOrValue('osc3NoiseType', currentType);
-            });
+        const updateButtonText = (type) => {
+            currentType = type;
+            button.textContent = typeNames[type];
+        };
+
+        button.addEventListener('click', () => {
+            const newType = (currentType + 1) % 3;
+            updateButtonText(newType);
+            this.patchConnection.sendEventOrValue('osc3NoiseType', newType);
         });
 
         this.listeners.osc3NoiseType = value => {
-            currentType = value;
-            this.updateNoiseTypeButtonStates(currentType, buttons);
+            updateButtonText(value);
         };
 
         this.patchConnection.addParameterListener('osc3NoiseType', this.listeners.osc3NoiseType);
         this.patchConnection.requestParameterValue('osc3NoiseType');
-    }
-
-    updateNoiseTypeButtonStates(currentType, buttons)
-    {
-        buttons.forEach(btnInfo => {
-            const button = this.querySelector(btnInfo.selector);
-            const isActive = currentType === btnInfo.type;
-            button.classList.toggle('active', isActive);
-        });
     }
 
     initFilterTypeSelect()

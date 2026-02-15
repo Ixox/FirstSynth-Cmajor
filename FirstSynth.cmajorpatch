@@ -13,7 +13,7 @@
     "worker":           "worker/worker.js",
 
     "view":             { "src": "view/index.js",
-                          "width": 1024,
+                          "width": 960,
                           "height": 820,
                           "resizable": true }
 }

@@ -176,7 +176,7 @@
 .control-group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0px;
 }
 
 .control-group.horizontal {
@@ -185,9 +185,8 @@
     align-items: flex-start;
 }
 
-.control-group.center {
-    align-items: center;
-    justify-content: center;
+.control-group.filter {
+    margin-top:20px;
 }
 
 /* Submodule */
@@ -206,9 +205,12 @@
     gap: 0px;
 }
 
-.control.small {
-    min-width: 50px;
+.control.horizontal-label {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
 }
+
 
 
 .control-label {
@@ -222,14 +224,9 @@
 
 /* Canvas elements */
 .control-canvas {
-    width: 45px;
-    height: 45px;
-    cursor: pointer;
-}
-
-.control-canvas.small {
     width: 40px;
     height: 40px;
+    cursor: pointer;
 }
 
 
@@ -242,11 +239,9 @@
     width: 100%;
     height: 100px;
     border-radius: 5px;
+    margin-bottom: 12px;
 }
 
-.visualization-canvas.small {
-    height: 60px;
-}
 
 /* Envelope canvas wrapper for cross positioning */
 .envelope-canvas-wrapper {
@@ -308,7 +303,7 @@
     cursor: pointer;
     letter-spacing: 0.5px;
     transition: all 0.2s;
-    margin: 2px;
+    width:60px;
 }
 
 .control-button:hover {

@@ -209,13 +209,14 @@ export class RotaryKnob {
         const currentAngle = startAngle + normalizedValue * angleRange;
         
         // Draw outer track (inactive range)
+        /*
         this.ctx.beginPath();
         this.ctx.arc(this.centerX, this.centerY, this.radius, startAngle, endAngle);
         this.ctx.strokeStyle = this.trackColor;
         this.ctx.lineWidth = 3;
         this.ctx.lineCap = 'round';
         this.ctx.stroke();
-        
+        */
         // Draw active value arc
         this.ctx.beginPath();
         this.ctx.arc(this.centerX, this.centerY, this.radius, startAngle, currentAngle);
@@ -225,13 +226,13 @@ export class RotaryKnob {
         this.ctx.stroke();
         
         // Draw inner knob body (flat circle)
-        const knobRadius = this.radius * 0.65;
+        const knobRadius = this.radius - 4;
         
 
         this.ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
         this.ctx.shadowBlur = 5;
-        this.ctx.shadowOffsetY = 8;
-        this.ctx.shadowOffsetX = 3;
+        this.ctx.shadowOffsetY = 5;
+        this.ctx.shadowOffsetX = 2;
 
         this.ctx.beginPath();
         this.ctx.arc(this.centerX, this.centerY, knobRadius, 0, 2 * Math.PI);
@@ -243,14 +244,15 @@ export class RotaryKnob {
         this.ctx.shadowColor = 'transparent';
 
         // Draw knob border
+        /*
         this.ctx.beginPath();
         this.ctx.arc(this.centerX, this.centerY, knobRadius, 0, 2 * Math.PI);
         this.ctx.strokeStyle = this.trackColor;
         this.ctx.lineWidth = 2;
         this.ctx.stroke();
-        
+        */
         // Draw position indicator (line from center to edge)
-        const notchLength = knobRadius * 0.7;
+        const notchLength = knobRadius - 2;
         const notchX = this.centerX + Math.cos(currentAngle) * notchLength;
         const notchY = this.centerY + Math.sin(currentAngle) * notchLength;
         
