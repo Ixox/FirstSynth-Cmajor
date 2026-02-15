@@ -1,0 +1,1624 @@
+
+// Here's a very simple synth
+
+graph FirstSynth  [[ main ]]
+{
+    input { 
+        event std::midi::Message midiIn  [[ name: "MIDI input" ]];
+        paramsProcessor.*;
+    }
+    output {
+        stream float<2> audioOut  [[ name: "Audio Out" ]];
+    }
+
+    node {
+        voices = Voice[16];
+        voiceAllocator = std::voices::VoiceAllocator(16);
+        paramsProcessor = Instrument::Processor;
+        chorusProcessor = Chorus;
+        stereoSpreadProcessor = StereoSpread;
+    }
+
+    connection {
+        midiIn -> std::midi::MPEConverter -> voiceAllocator;
+        voiceAllocator.voiceEventOut -> voices.eventIn;
+
+        voices.audioOut -> stereoSpreadProcessor.audioIn;
+        stereoSpreadProcessor.audioOut -> chorusProcessor.audioIn;
+        chorusProcessor.audioOut -> audioOut;
+
+        paramsProcessor.paramsOut -> voices.paramsIn;
+        paramsProcessor.oscParamsOut -> voices.oscParamsIn;
+        
+        paramsProcessor.envParamsOut -> voices.envParamsIn;
+        paramsProcessor.lfoParamsOut -> voices.lfoParamsIn;
+        paramsProcessor.mtxSourceUpdateOut -> voices.mtxSourceUpdateIn;
+        paramsProcessor.mtxMultiplierUpdateOut -> voices.mtxMultiplierUpdateIn;
+        paramsProcessor.mtxDest1UpdateOut -> voices.mtxDest1UpdateIn;
+        paramsProcessor.mtxDest2UpdateOut -> voices.mtxDest2UpdateIn;
+        
+        paramsProcessor.chorusAmountOut -> chorusProcessor.amountIn;
+        paramsProcessor.stereoSpreadOut -> stereoSpreadProcessor.spreadAmount;
+
+    }
+}
+
+
+namespace Instrument {
+
+    namespace MtxSource {
+        const int NONE = 0;
+        const int LFO1 = 1;
+        const int LFO2 = 2;
+        const int LFO3 = 3;
+        const int ENV1 = 4;
+        const int ENV2 = 5;
+        const int ENV3 = 6;
+        const int KEYTRACK = 7;
+        const int VELOCITY = 8;
+        const int SIZE = 9;
+    }
+
+    namespace MtxDestination {
+        const int NONE = 0;
+        const int OSC1_WAVESHAPE = 1;
+        const int OSC2_WAVESHAPE = 2;
+        const int OSC3_WAVESHAPE = 3;
+        const int OSC1_PITCH = 4;
+        const int OSC2_PITCH = 5;
+        const int OSC3_PITCH = 6;
+        const int OSC1_PAN = 7;
+        const int OSC2_PAN = 8;
+        const int OSC3_PAN = 9;
+        const int OSC1_GAIN = 10;
+        const int OSC2_GAIN = 11;
+        const int OSC3_GAIN = 12;
+        const int FILTER_CUTOFF = 13;
+        const int FILTER_RESONANCE = 14;
+        const int LFO1_RATE = 15;
+        const int LFO2_RATE = 16;
+        const int LFO3_RATE = 17;
+        const int SIZE = 18;
+    }
+
+    struct MtxRow {
+        int32 source;
+        float32 multiplier;
+        int32 dest1;
+        int32 dest2;
+    }
+
+    struct MtxSourceUpdate {
+        int32 index;
+        int32 source;
+    } 
+
+    struct MtxMultiplierUpdate {
+        int32 index;
+        float32 multiplier;
+    }
+
+    struct MtxDestination1Update {
+        int32 index;
+        int32 dest1;
+    }
+
+    struct MtxDestination2Update {
+        int32 index;
+        int32 dest2;
+    }
+
+    struct EnvParams {
+        int32 index;
+        float32 attack;
+        float32 decay;
+        float32 sustain;
+        float32 release;
+    }
+
+    struct LfoParams {
+        int32 index;
+        float32 rate;
+        int32 shape; 
+        float32 ramp;               
+    }
+
+    struct OscParams {
+        int32 index;
+        float32 transpose;
+        float32 detune;
+        float32 gain;
+        int32 waveshape;
+        float32 saturation;
+        int32 saturationType;
+        int32 pan;
+        int32 sync;
+    }
+
+    struct Params {     
+        // Ring Modulation
+        float32 rmAmount;
+        
+        // Oscillator 3 Noise
+        float32 osc3NoiseAmount;
+        int32 osc3NoiseType;
+        
+        // Filter
+        int32 filterType;
+        float32 filterCutoff;
+        float32 filterResonance;
+        
+        // Stereo Effects
+        float32 stereoSpread;
+        float32 chorusAmount;
+        
+        // Global
+        float32 mainGain;
+    }
+
+    Params createParams() {
+        Params p;
+        // Ring Modulation
+        p.rmAmount = 0.0f;
+        
+        // Oscillator 3 Noise
+        p.osc3NoiseAmount = 0.0f;
+        p.osc3NoiseType = 0;
+        
+        // Filter
+        p.filterCutoff = 2000.0f;
+        p.filterResonance = 0.5f;
+        p.filterType = 0;  // 0 = lowPass, 1 = highPass
+               
+        // Stereo Effects
+        p.stereoSpread = 0.3f;
+        p.chorusAmount = 0.0f;
+        
+        // Global
+        p.mainGain = 0.0f;
+        return p;
+    }
+
+    EnvParams createEnvParams(int index) {
+        EnvParams env;
+        env.index = index;
+        env.attack = 0.01f;
+        env.decay = 0.1f;
+        env.sustain = 0.3f;
+        env.release= 1.0f;
+        return env;
+    }
+
+    LfoParams createLfoParams(int32 index) {
+        LfoParams lfo;
+        lfo.index = index;
+        lfo.rate = 1.0f;
+        lfo.shape = 0;
+        lfo.ramp = 0.0f;
+        return lfo;
+    }
+
+    OscParams createOscParams(int32 index) {
+        OscParams p;
+        p.index = index;
+        p.transpose = 0.0f;
+        p.detune = 0.0f;
+        p.gain = 0.8f;
+        p.waveshape = 0;
+        p.pan = 0;
+        p.saturation = 0.0f;
+        p.saturationType = 0;
+        return p;
+    }
+
+    MtxRow createMtxRow(int i1, int i2) {
+        MtxRow row;
+        row.source = MtxSource::NONE;
+        row.multiplier = 1.0f;
+        row.dest1 = MtxDestination::NONE;
+        row.dest2 = MtxDestination::NONE;
+        return row;
+    }
+
+    struct ParamOut {
+        int32 paramId;
+        int32 newValue;
+    }
+
+
+    processor Processor {
+
+        // input event (std::notes::Control) controlEventIn;
+
+        // Oscillator 1
+        input {
+            event float32 osc1Transpose       [[ name: "Osc 1 Transpose", min: -48, max: 48, step: 1, init: 0 ]];
+            event int osc1Detune              [[ name: "Osc 1 Detune", min: -50, max: 50, step: 1, init: 0 ]];
+            event int osc1Gain                [[ name: "Osc 1 Gain", min: 0, max: 141, step: 1, init: 80 ]];
+            event int osc1WaveshapeIn         [[ name: "Osc 1 Waveshape", min: 0, max: 99, step: 1, init: 15 ]];
+            event int osc1Pan                 [[ name: "Osc 1 Pan", min: -100, max: 100, step: 1, init: 0 ]];
+            event int osc1Saturation          [[ name: "Osc 1 Saturation", min: 0, max: 100, step: 1, init: 0 ]];
+            event int osc1SaturationType      [[ name: "Osc 1 Saturation Type", min: 0, max: 3, step: 1, init: 0 ]];
+            
+            // Oscillator 2
+            event float32 osc2Transpose       [[ name: "Osc 2 Transpose", min: -48, max: 48, step: 1, init: 0 ]];
+            event int osc2Detune              [[ name: "Osc 2 Detune", min: -50, max: 50, step: 1, init: 5 ]];
+            event int osc2Gain                [[ name: "Osc 2 Gain", min: 0, max: 141, step: 1, init: 50 ]];
+            event int osc2WaveshapeIn         [[ name: "Osc 2 Waveshape", min: 0, max: 99, step: 1, init: 0 ]];
+            event int osc2Sync                [[ name: "Osc 2 Sync", min: 0, max: 1, step: 1, init: 0 ]];
+            event int osc2Pan                 [[ name: "Osc 2 Pan", min: -100, max: 100, step: 1, init: 0 ]];
+            event int osc2Saturation          [[ name: "Osc 2 Saturation", min: 0, max: 100, step: 1, init: 0 ]];
+            event int osc2SaturationType      [[ name: "Osc 2 Saturation Type", min: 0, max: 3, step: 1, init: 0 ]];
+            
+            // Oscillator 3
+            event float32 osc3Transpose       [[ name: "Osc 3 Transpose", min: -48, max: 48, step: 1, init: 0 ]];
+            event int osc3Detune              [[ name: "Osc 3 Detune", min: -50, max: 50, step: 1, init: 0 ]];
+            event int osc3Gain                [[ name: "Osc 3 Gain", min: 0, max: 141, step: 1, init: 30 ]];
+            event int osc3WaveshapeIn         [[ name: "Osc 3 Waveshape", min: 0, max: 99, step: 1, init: 0 ]];
+            event int osc3Pan                 [[ name: "Osc 3 Pan", min: -100, max: 100, step: 1, init: 0 ]];
+            event int osc3Saturation          [[ name: "Osc 3 Saturation", min: 0, max: 100, step: 1, init: 0 ]];
+            event int osc3SaturationType      [[ name: "Osc 3 Saturation Type", min: 0, max: 3, step: 1, init: 0 ]];
+            event int osc3NoiseAmount         [[ name: "Osc 3 Noise Amount", min: 0, max: 100, step: 1, init: 0 ]];
+            event int osc3NoiseType           [[ name: "Osc 3 Noise Type", min: 0, max: 2, step: 1, init: 0 ]];
+          
+            // Ring Modulation
+            event int rmAmount                [[ name: "RM Amount", min: 0, max: 100, step: 1, init: 0 ]];
+            
+            // Filter
+            event int filterCutoff            [[ name: "Filter Cutoff", min: 20, max: 20000, step: 1, init: 2000 ]];
+            event int filterResonance         [[ name: "Filter Resonance", min: 20, max: 1000, step: 1, init: 50 ]];
+            event int filterType              [[ name: "Filter Type", min: 0, max: 1, step: 1, init: 0 ]];
+
+            // Env 1,2,3
+            event int env1Attack               [[ name: "Env 1 Attack", min: 1, max: 5000, step: 1, init: 10 ]];
+            event int env1Decay                [[ name: "Env 1 Decay", min: 1, max: 5000, step: 1, init: 100 ]];
+            event int env1Sustain              [[ name: "Env 1 Sustain", min: 0, max: 100, step: 1, init: 70 ]];
+            event int env1Release              [[ name: "Env 1 Release", min: 1, max: 5000, step: 1, init: 300 ]];
+            event int env2Attack               [[ name: "Env 2 Attack", min: 1, max: 5000, step: 1, init: 10 ]];
+            event int env2Decay                [[ name: "Env 2 Decay", min: 1, max: 5000, step: 1, init: 100 ]];
+            event int env2Sustain              [[ name: "Env 2 Sustain", min: 0, max: 100, step: 1, init: 100 ]];
+            event int env2Release              [[ name: "Env 2 Release", min: 1, max: 5000, step: 1, init: 300 ]];
+            event int env3Attack               [[ name: "Env 3 Attack", min: 1, max: 5000, step: 1, init: 10 ]];
+            event int env3Decay                [[ name: "Env 3 Decay", min: 1, max: 5000, step: 1, init: 100 ]];
+            event int env3Sustain              [[ name: "Env 3 Sustain", min: 0, max: 100, step: 1, init: 100 ]];
+            event int env3Release              [[ name: "Env 3 Release", min: 1, max: 5000, step: 1, init: 300 ]];
+
+            // 'WaveShape', 'Rate', 'Ramp' for LFOs would be handled similarly
+            event int lfo1Rate                 [[ name: "LFO 1 Rate", min: 1, max: 601, step: 1, init: 50 ]];
+            event int lfo2Rate                 [[ name: "LFO 2 Rate", min: 1, max: 601, step: 1, init: 50 ]];
+            event int lfo3Rate                 [[ name: "LFO 3 Rate", min: 1, max: 601, step: 1, init: 50 ]];
+            // Ramp
+            event int lfo1Ramp                 [[ name: "LFO 1 Ramp", min: 0, max: 5000, step: 1, init: 0 ]];
+            event int lfo2Ramp                 [[ name: "LFO 2 Ramp", min: 0, max: 5000, step: 1, init: 0 ]];
+            event int lfo3Ramp                 [[ name: "LFO 3 Ramp", min: 0, max: 5000, step: 1, init: 0 ]];
+            // WaveShape
+            event int lfo1WaveShape            [[ name: "LFO 1 WaveShape", min: 0, max: 5, step: 1, init: 0 ]];
+            event int lfo2WaveShape            [[ name: "LFO 2 WaveShape", min: 0, max: 5, step: 1, init: 0 ]];
+            event int lfo3WaveShape            [[ name: "LFO 3 WaveShape", min: 0, max: 5, step: 1, init: 0 ]];
+            
+            // Stereo Effects
+            event int stereoSpread            [[ name: "Stereo Spread", min: 0, max: 100, step: 1, init: 30 ]];
+            event int chorusAmount            [[ name: "Chorus Amount", min: 0, max: 100, step: 1, init: 0 ]];
+            
+            // Global
+            event int mainGain                 [[ name: "mainGain", min: 0, max: 141, step: 1, init: 100, cc:21 ]];
+
+            // Matrix 
+            // Row 1
+            event int mtxRow1Source                 [[ name: "Mtx Row 1 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init: MtxSource::LFO1 ]];
+            event float mtxRow1Multiplier           [[ name: "Mtx Row 1 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow1Dest1                  [[ name: "Mtx Row 1 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow1Dest2                  [[ name: "Mtx Row 1 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            // Row 2
+            event int mtxRow2Source                 [[ name: "Mtx Row 2 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init: MtxSource::LFO2 ]];
+            event float mtxRow2Multiplier           [[ name: "Mtx Row 2 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow2Dest1                  [[ name: "Mtx Row 2 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow2Dest2                  [[ name: "Mtx Row 2 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+                // Row 3
+            event int mtxRow3Source                 [[ name: "Mtx Row 3 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init: MtxSource::LFO3 ]];
+            event float mtxRow3Multiplier           [[ name: "Mtx Row 3 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow3Dest1                  [[ name: "Mtx Row 3 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow3Dest2                  [[ name: "Mtx Row 3 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            // Row 4
+            event int mtxRow4Source                 [[ name: "Mtx Row 4 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init: MtxSource::ENV1 ]];
+            event float mtxRow4Multiplier           [[ name: "Mtx Row 4 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow4Dest1                  [[ name: "Mtx Row 4 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow4Dest2                  [[ name: "Mtx Row 4 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            // Row 5
+            event int mtxRow5Source                 [[ name: "Mtx Row 5 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init: MtxSource::ENV2 ]];
+            event float mtxRow5Multiplier           [[ name: "Mtx Row 5 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow5Dest1                  [[ name: "Mtx Row 5 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow5Dest2                  [[ name: "Mtx Row 5 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            // Row 6
+            event int mtxRow6Source                 [[ name: "Mtx Row 6 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init: MtxSource::ENV3 ]];
+            event float mtxRow6Multiplier           [[ name: "Mtx Row 6 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow6Dest1                  [[ name: "Mtx Row 6 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow6Dest2                  [[ name: "Mtx Row 6 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            // Row 7
+            event int mtxRow7Source                 [[ name: "Mtx Row 7 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init: MtxSource::KEYTRACK ]];
+            event float mtxRow7Multiplier           [[ name: "Mtx Row 7 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow7Dest1                  [[ name: "Mtx Row 7 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow7Dest2                  [[ name: "Mtx Row 7 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            // Row 8
+            event int mtxRow8Source                 [[ name: "Mtx Row 8 Src", min: 0, max: MtxSource::SIZE-1, step: 1, init:MtxSource::VELOCITY ]];
+            event float mtxRow8Multiplier           [[ name: "Mtx Row 8 Mult", min: -10, max: 10, step: .01, init: 1 ]];
+            event int mtxRow8Dest1                  [[ name: "Mtx Row 8 Dest 1", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+            event int mtxRow8Dest2                  [[ name: "Mtx Row 8 Dest 2", min: 0, max: MtxDestination::SIZE-1, step: 1, init: 0 ]];
+
+        }
+
+        output {
+            event Instrument::Params paramsOut;
+            event Instrument::OscParams oscParamsOut;
+            event Instrument::EnvParams envParamsOut;
+            event Instrument::LfoParams lfoParamsOut;
+            event Instrument::MtxSourceUpdate mtxSourceUpdateOut;
+            event Instrument::MtxMultiplierUpdate mtxMultiplierUpdateOut;
+            event Instrument::MtxDestination1Update mtxDest1UpdateOut;
+            event Instrument::MtxDestination2Update mtxDest2UpdateOut;            
+
+            event float stereoSpreadOut;
+            event float chorusAmountOut;
+        }
+
+        Instrument::Params params = createParams();
+        Instrument::OscParams[3] oscParams = (createOscParams(0), createOscParams(1), createOscParams(2));
+        Instrument::EnvParams[3] envParams = (createEnvParams(0), createEnvParams(1), createEnvParams(2));
+        Instrument::LfoParams[3] lfoParams = (createLfoParams(0), createLfoParams(1), createLfoParams(2));
+
+        Instrument::ParamOut paramOut;
+
+
+        // Oscillator 1 events
+        event osc1Transpose(float32 f) {
+            oscParams.at(0).transpose = f;
+            oscParamsOut <- oscParams.at(0);
+        }
+        event osc1Detune(int i) {
+            oscParams.at(0).detune = float(i);
+            oscParamsOut <- oscParams.at(0);
+        }
+        event osc1Gain(int i) {
+            oscParams.at(0).gain = float(i) / 100.0f;
+            oscParamsOut <- oscParams.at(0);
+        }
+        event osc1WaveshapeIn(int i) {
+            oscParams.at(0).waveshape = i;
+            oscParamsOut <- oscParams.at(0);
+        }
+        event osc1Pan(int i) {
+            oscParams.at(0).pan = i;
+            oscParamsOut <- oscParams.at(0);
+        }
+        event osc1Saturation(int i) {
+            oscParams.at(0).saturation = float(i) / 100.0f;
+            oscParamsOut <- oscParams.at(0);
+        }
+        event osc1SaturationType(int i) {
+            oscParams.at(0).saturationType = i;
+            oscParamsOut <- oscParams.at(0);
+        }
+        
+        // Oscillator 2 events
+        event osc2Transpose(float32 f) {
+            oscParams.at(1).transpose = f;
+            oscParamsOut <- oscParams.at(1);
+        }
+        event osc2Detune(int i) {
+            oscParams.at(1).detune = float(i);
+            oscParamsOut <- oscParams.at(1);
+        }
+        event osc2Gain(int i) {
+            oscParams.at(1).gain = float(i) / 100.0f;
+            oscParamsOut <- oscParams.at(1);
+        }
+        event osc2WaveshapeIn(int i) {
+            oscParams.at(1).waveshape = i;
+            oscParamsOut <- oscParams.at(1);
+        }
+        event osc2Sync(int i) {
+            oscParams.at(1).sync = i;
+            oscParamsOut <- oscParams.at(1);
+        }
+        event osc2Pan(int i) {
+            oscParams.at(1).pan = i;
+            oscParamsOut <- oscParams.at(1);
+        }
+        event osc2Saturation(int i) {
+            oscParams.at(1).saturation = float(i) / 100.0f;
+            oscParamsOut <- oscParams.at(1);
+        }
+        event osc2SaturationType(int i) {
+            oscParams.at(1).saturationType = i;
+            oscParamsOut <- oscParams.at(1);
+        }
+        
+        // Oscillator 3 events
+        event osc3Transpose(float32 f) {
+            oscParams.at(2).transpose = f;
+            oscParamsOut <- oscParams.at(2);
+        }
+        event osc3Detune(int i) {
+            oscParams.at(2).detune = float(i);
+            oscParamsOut <- oscParams.at(2);
+        }
+        event osc3Gain(int i) {
+            oscParams.at(2).gain = float(i) / 100.0f;
+            oscParamsOut <- oscParams.at(2);
+        }
+        event osc3WaveshapeIn(int i) {
+            oscParams.at(2).waveshape = i;
+            oscParamsOut <- oscParams.at(2);
+        }
+        event osc3Pan(int i) {
+            oscParams.at(2).pan = i;
+            oscParamsOut <- oscParams.at(2);
+        }
+        event osc3Saturation(int i) {
+            oscParams.at(2).saturation = float(i) / 100.0f;
+            oscParamsOut <- oscParams.at(2);
+        }
+        event osc3SaturationType(int i) {
+            oscParams.at(2).saturationType = i;
+            oscParamsOut <- oscParams.at(2);
+        }
+
+        // Oscillator 3 Noise events
+        event osc3NoiseAmount(int i) {
+            params.osc3NoiseAmount = float(i) / 100.0f;
+            paramsOut <- params;
+        }
+        event osc3NoiseType(int i) {
+            params.osc3NoiseType = i;
+            paramsOut <- params;
+        }
+
+        // Ring Modulation event
+        event rmAmount(int i) {
+            params.rmAmount = float(i) / 100.0f;
+            paramsOut <- params;
+        }
+        
+        // Filter events
+        event filterCutoff(int i) {
+            params.filterCutoff = float(i);
+            paramsOut <- params;
+        }
+        event filterResonance(int i) {
+            params.filterResonance = float(i) / 100.0f;  // 0-1000 -> 0.0-10.0
+            paramsOut <- params;
+        }
+        event filterType(int i) {
+            params.filterType = i;
+            paramsOut <- params;
+        }
+        // Env 1 events
+        event env1Attack(int i) {
+            envParams.at(0).attack = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(0);
+        }
+        event env1Decay(int i) {
+            envParams.at(0).decay = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(0);
+        }
+        event env1Sustain(int i) {
+            envParams.at(0).sustain = float(i) / 100.0f;
+            envParamsOut <- envParams.at(0);
+        }
+        event env1Release(int i) {
+            envParams.at(0).release = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(0);
+        }
+
+        // Env 2 events
+        event env2Attack(int i) {
+            envParams.at(1).attack = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(1);
+        }
+        event env2Decay(int i) {
+            envParams.at(1).decay = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(1);
+        }
+        event env2Sustain(int i) {
+            envParams.at(1).sustain = float(i) / 100.0f;
+            envParamsOut <- envParams.at(1);
+        }
+        event env2Release(int i) {
+            envParams.at(1).release = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(1);
+        }
+
+        // Env 3 events
+        event env3Attack(int i) {
+            envParams.at(2).attack = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(2);
+        }
+        event env3Decay(int i) {
+            envParams.at(2).decay = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(2);
+        }
+        event env3Sustain(int i) {
+            envParams.at(2).sustain = float(i) / 100.0f;
+            envParamsOut <- envParams.at(2);
+        }
+        event env3Release(int i) {
+            envParams.at(2).release = float(i) / 1000.0f;
+            envParamsOut <- envParams.at(2);
+        }
+        
+        // Stereo Effects events
+        event stereoSpread(int i) {
+            params.stereoSpread = float(i) / 100.0f;
+            stereoSpreadOut <- params.stereoSpread;
+        }
+        event chorusAmount(int i) {
+            params.chorusAmount = float(i) / 100.0f;
+            chorusAmountOut <- params.chorusAmount;
+        }
+       
+        event mainGain(int i) {
+            params.mainGain = float(i) / 100.0f;
+            paramsOut <- params;
+        }
+
+        event lfo1Rate(int i) {
+            lfoParams.at(0).rate = 0.1f + (float(i) / 100.0f) * 9.9f;  // 0.1 to 10 Hz
+            lfoParamsOut <- lfoParams.at(0);
+        }
+        event lfo2Rate(int i) {
+            lfoParams.at(1).rate = 0.1f + (float(i) / 100.0f) * 9.9f;  // 0.1 to 10 Hz
+            lfoParamsOut <- lfoParams.at(1);
+        }
+        event lfo3Rate(int i) {
+            lfoParams.at(2).rate = 0.1f + (float(i) / 100.0f) * 9.9f;  // 0.1 to 10 Hz
+            lfoParamsOut <- lfoParams.at(2);
+        }
+        event lfo1Ramp(int i) {
+            lfoParams.at(0).ramp = float(i) / 1000.0f;  // in seconds
+            lfoParamsOut <- lfoParams.at(0);
+        }
+        event lfo2Ramp(int i) {
+            lfoParams.at(1).ramp = float(i) / 1000.0f;  // in seconds
+            lfoParamsOut <- lfoParams.at(1);
+        }
+        event lfo3Ramp(int i) {
+            lfoParams.at(2).ramp = float(i) / 1000.0f;  // in seconds
+            lfoParamsOut <- lfoParams.at(2);
+        }
+        event lfo1WaveShape(int i) {
+            lfoParams.at(0).shape = i;
+            lfoParamsOut <- lfoParams.at(0);
+        }
+        event lfo2WaveShape(int i) {
+            lfoParams.at(1).shape = i;
+            lfoParamsOut <- lfoParams.at(1);
+        }
+        event lfo3WaveShape(int i) {
+            lfoParams.at(2).shape = i;
+            lfoParamsOut <- lfoParams.at(2);
+        }
+
+        event mtxRow1Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 1;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow1Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 1;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow1Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 1;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow1Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 1;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+        event mtxRow2Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 2;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow2Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 2;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow2Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 2;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow2Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 2;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+        event mtxRow3Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 3;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow3Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 3;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow3Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 3;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow3Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 3;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+        event mtxRow4Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 4;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow4Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 4;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow4Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 4;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow4Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 4;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+        event mtxRow5Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 5;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow5Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 5;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow5Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 5;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow5Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 5;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+        event mtxRow6Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 6;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow6Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 6;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow6Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 6;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow6Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 6;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+        event mtxRow7Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 7;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow7Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 7;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow7Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 7;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow7Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 7;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+        event mtxRow8Source(int32 i) {
+            MtxSourceUpdate mtxUpdate;
+            mtxUpdate.index = 8;
+            mtxUpdate.source = i;
+            mtxSourceUpdateOut <- mtxUpdate;
+        }
+        event mtxRow8Multiplier(float32 f) {
+            MtxMultiplierUpdate mtxUpdate;
+            mtxUpdate.index = 8;
+            mtxUpdate.multiplier = f;
+            mtxMultiplierUpdateOut <- mtxUpdate;
+        }
+        event mtxRow8Dest1(int32 i) {
+            MtxDestination1Update mtxUpdate;
+            mtxUpdate.index = 8;
+            mtxUpdate.dest1 = i;
+            mtxDest1UpdateOut <- mtxUpdate;
+        }
+        event mtxRow8Dest2(int32 i) {
+            MtxDestination2Update mtxUpdate;
+            mtxUpdate.index = 8;
+            mtxUpdate.dest2 = i;
+            mtxDest2UpdateOut <- mtxUpdate;
+        }
+
+    }
+
+}
+
+
+
+
+
+
+processor ADSREnvelope
+{
+    input event (std::notes::NoteOn, std::notes::NoteOff) eventIn;
+    input event Instrument::EnvParams envParamsIn;
+    output stream float32 gainOut;
+    output value int stateOut;
+
+
+    Instrument::EnvParams params = Instrument::createEnvParams(0);
+    float32 quickRelease = 0.02f;
+
+    float32 targetLevel = 0.0f;
+    float32 currentLevel = 0.0f;
+    float32 releaseLevel = 0.0f;
+    float32 velocity = 1.0f;
+    
+    int state = 0;  // 0=idle, 1=attack, 2=decay, 3=sustain, 4=release, 5=QuickRelease
+
+    float32 stateTime = 0.0f;
+
+    event envParamsIn(Instrument::EnvParams ep) {
+        params.attack = ep.attack;
+        params.decay = ep.decay;
+        params.sustain = ep.sustain;
+        params.release = ep.release;
+    }
+
+    event eventIn(std::notes::NoteOn e)
+    {
+        if (state != 0)
+        {
+            velocity = e.velocity;
+            stateTime = 0.0f;
+            targetLevel = velocity;
+            releaseLevel = currentLevel;        
+            setState(5); // Quick Release
+        }
+        else
+        {
+            velocity = e.velocity;
+            setState(1);  // Attack
+            stateTime = 0.0f;
+            targetLevel = velocity;
+        }
+    }
+
+    event eventIn(std::notes::NoteOff e)
+    {
+        setState(4);  // Release
+        stateTime = 0.0f;
+        releaseLevel = currentLevel;
+    }
+
+    void setState(int s) {
+        state = s;
+        stateOut <- state;
+    }
+
+    void main()
+    {
+        loop
+        {
+            if (state == 1)  // Attack
+            {
+                if (params.attack > 0.0f)
+                    currentLevel = (stateTime / params.attack) * targetLevel;
+                else
+                    currentLevel = targetLevel;
+                
+                if (stateTime >= params.attack)
+                {
+                    setState(2);  // Decay
+                    stateTime = 0.0f;
+                    currentLevel = targetLevel;
+                }
+            }
+            else if (state == 2)  // Decay
+            {
+                float32 decayAmount = targetLevel - (params.sustain * targetLevel);
+                if (params.decay > 0.0f)
+                    currentLevel = targetLevel - (stateTime / params.decay) * decayAmount;
+                else
+                    currentLevel = params.sustain * targetLevel;
+                
+                if (stateTime >= params.decay)
+                {
+                    setState(3);  // Sustain
+                    currentLevel = params.sustain * targetLevel;
+                }
+            }
+            else if (state == 3)  // Sustain
+            {
+                currentLevel = params.sustain * targetLevel;
+            }
+            else if (state == 4)  // Release
+            {
+                if (params.release > 0.0f)
+                    currentLevel = releaseLevel * (1.0f - (stateTime / params.release));
+                else
+                    currentLevel = 0.0f;
+                
+                if (stateTime >= params.release)
+                {
+                    setState(0);  // Idle
+                    currentLevel = 0.0f;
+                }
+            }
+            else if (state == 5)  // QuickRelease 1ms New note
+            {
+                currentLevel = releaseLevel * (1.0f - (stateTime / quickRelease));
+                
+                if (stateTime >= quickRelease)
+                {
+                    setState(1);  // attack
+                    currentLevel = 0.0f;
+                    stateTime = 0.0f;
+                }
+            }
+            else  // Idle
+            {
+                currentLevel = 0.0f;
+            }
+
+            gainOut <- currentLevel;
+
+            stateTime += float32(processor.period);
+            advance();
+        }
+    }
+}
+
+processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
+{
+    input {
+        stream float32 mixSignalIn;       
+        event float32 frequencyIn;
+        event float32 gainIn;
+        event Instrument::OscParams oscParamsIn;
+        event void resetPhaseIn;
+        value float32 waveShapeModulationIn;
+        value float32 pitchModulationIn;
+        value float32 panModulationIn;
+        value float32 gainModulationIn;
+    }
+
+    output {
+        stream float32 audioOut;
+        stream float32 beforeGainOut;
+        stream float32 phaseOut;
+        value float32 panOut;
+        value int32 oscSyncOut;
+    }
+
+    node {
+        saturator = Saturator;
+    }
+
+    float32 phase;
+    float32 previousPhase;
+    float32 baseFrequency;
+    float32 phaseIncrement;
+
+    float lastFrequency;
+
+    Instrument::OscParams oscParams;
+
+    void init() {
+        phase = 0.0f;
+        previousPhase = 0.0f;
+        baseFrequency = intialFrequency;
+        updatePhaseIncrement(baseFrequency);
+    }
+
+
+    void updatePhaseIncrement(float32 frequency)
+    {
+        // Apply transpose: multiply by 2^(transpose/12) where transpose is in semitones
+        float32 octaveMultiplier = pow(2.0f, oscParams.transpose / 12.0f);
+        // Apply detune: multiply by 2^(detune/1200) where detune is in cents
+        float32 detuneMultiplier = pow(2.0f, oscParams.detune / 1200.0f);
+        float32 finalFrequency = frequency * octaveMultiplier * detuneMultiplier;
+        phaseIncrement = float32 (finalFrequency * processor.period);
+    }
+
+    event oscParamsIn (Instrument::OscParams params) {
+        oscParams = params;
+        panOut <- getModulatedPan(oscParams.pan, 0.0f);
+        oscSyncOut <- params.sync;
+        updatePhaseIncrement(baseFrequency);
+        saturator.driveIn <- params.saturation;
+        saturator.typeIn <- params.saturationType;
+    }
+
+    event frequencyIn(float newFrequency) {
+        baseFrequency = newFrequency;
+        updatePhaseIncrement(baseFrequency);
+    }
+
+    event resetPhaseIn() {
+        phase = 0.0f;
+    }
+
+    int32 getWaveShape() {
+        return int32(((oscParams.waveshape + waveShapeModulationIn) % 100 + 100) % 100);
+    }
+
+    float32 getModulatedPan(int32 basePan, float32 panMod) {
+        // basePan is -100 to 100, panMod is -1.0 to 1.0
+        float32 modulatedPan = basePan + (panMod * 100.0f);
+        return max(-100.0f, min(100.0f, modulatedPan));
+    }
+
+    void main()
+    {
+        loop
+        {
+            // Interpolate between waveforms based on currentWaveShape (0-99)
+            // 0=sine, 25=square, 50=sawtooth, 75=triangle
+            float32 sample;
+            int32 waveValue = getWaveShape();
+
+            float32 modulatedFrequency = baseFrequency * pow(2.0f, pitchModulationIn / 12.0f);
+
+            if (modulatedFrequency != lastFrequency) {
+                updatePhaseIncrement(modulatedFrequency);
+                lastFrequency = modulatedFrequency;
+            }
+
+            // Calculate blend based on value position
+            if (waveValue <= 25) {
+                float32 sineWave = std::oscillators::waveshape::sine(phase);
+                float32 squareWave = std::oscillators::waveshape::square(phase);
+                // Between sine and square
+                float32 t = float32(waveValue) / 25.0f;
+                sample = (1.0f - t) * sineWave + t * squareWave;
+            } else if (waveValue <= 50) {
+                float32 squareWave = std::oscillators::waveshape::square(phase);
+                float32 sawtoothWave = std::oscillators::waveshape::sawtoothUp(phase);
+                // Between square and sawtooth
+                float32 t = float32(waveValue - 25) / 25.0f;
+                sample = (1.0f - t) * squareWave + t * sawtoothWave;
+            } else if (waveValue <= 75) {
+                float32 sawtoothWave = std::oscillators::waveshape::sawtoothUp(phase);
+                float32 triangleWave = std::oscillators::waveshape::triangle(phase);
+                // Between sawtooth and triangle
+                float32 t = float32(waveValue - 50) / 25.0f;
+                sample = (1.0f - t) * sawtoothWave + t * triangleWave;
+            } else {
+                float32 triangleWave = std::oscillators::waveshape::triangle(phase);
+                float32 sineWave = std::oscillators::waveshape::sine(phase);
+                // Between triangle and sine (wrapping around)
+                float32 t = float32(waveValue - 75) / 24.0f; // 75-99 = 24 steps
+                sample = (1.0f - t) * triangleWave + t * sineWave;
+            }
+            
+            beforeGainOut <- sample;
+            saturator.audioIn <- (sample + mixSignalIn) * (oscParams.gain + gainModulationIn);
+            saturator.advance();
+            audioOut <- saturator.audioOut;
+            if (panModulationIn != 0.0f) {
+                panOut <- getModulatedPan(oscParams.pan, panModulationIn);
+            }
+            phaseOut <- phase;
+            previousPhase = phase;
+            phase = fmod (phase + phaseIncrement, 1.0f);
+            advance();
+        }
+    }
+}
+
+
+processor MyLfo(float32 initialShape = 0, float32 initialRate = 3.0f, float32 initialRampTime = 0.5f)
+{
+    input {
+        event float32 rateIn;
+        event int32 shapeIn;
+        event void resetRampIn;
+        event float32 rampIn;
+        value float32 rateModulationIn;
+    }
+
+    output {
+        stream float32 out;
+    }
+
+    node {
+        lfo = std::oscillators::LFO;
+    }
+
+
+    float32 ramp;
+    float32 rampIncrement;
+    float32 lastRateModulationIn;
+
+    void init() {
+        lfo.rateHzIn <- initialRate;
+        lfo.shapeIn <- initialShape;
+        rampIncrement = float32(processor.period / initialRampTime);
+        ramp = 0.0f;
+    }
+
+    event rateIn(float32 newRate) {
+        lfo.rateHzIn <- newRate;
+    }
+
+    event shapeIn(int32 newShape) {
+        lfo.shapeIn <- float32(newShape);
+    }
+
+    event resetRampIn() {
+        ramp = 0.0f;
+    }
+
+    event rampIn(float32 newRampTime) {
+        rampIncrement = float32(processor.period / newRampTime);
+    }
+
+    void main()
+    {
+        loop
+        {
+            if (rateModulationIn != lastRateModulationIn) {
+                lfo.rateHzIn <- rateModulationIn + rateModulationIn;
+                lastRateModulationIn = rateModulationIn;
+            }
+
+            if (ramp < 1.0f) {
+                ramp = min(ramp + rampIncrement, 1.0f);
+            }
+            
+            // Get LFO output and apply ramp
+            var lfoOutput = lfo.out;
+            out <- float32(lfoOutput) * ramp;
+            lfo.advance();
+            advance();
+        }
+    }
+
+}
+
+
+processor Voice
+{
+    input {
+        event (std::notes::NoteOn, std::notes::NoteOff) eventIn;
+        event Instrument::Params paramsIn;
+        event Instrument::OscParams oscParamsIn;
+        event Instrument::LfoParams lfoParamsIn;
+        event Instrument::EnvParams envParamsIn;
+        event Instrument::MtxSourceUpdate mtxSourceUpdateIn;
+        event Instrument::MtxMultiplierUpdate mtxMultiplierUpdateIn;
+        event Instrument::MtxDestination1Update mtxDest1UpdateIn;
+        event Instrument::MtxDestination2Update mtxDest2UpdateIn;
+    }
+
+
+    output {
+        stream float<2> audioOut  [[ name: "Voice Audio Out" ]];        
+    }
+
+
+    node {
+        oscillator = MyOscillator[3];
+        envelopes = ADSREnvelope[3];
+        lfos = MyLfo[3];
+
+        filterLowPassL = std::filters::tpt::svf::Processor(std::filters::tpt::svf::Mode::lowPass, 2000.0f, 0.5f);
+        filterLowPassR = std::filters::tpt::svf::Processor(std::filters::tpt::svf::Mode::lowPass, 2000.0f, 0.5f);
+
+        filterHighPassL = std::filters::tpt::svf::Processor(std::filters::tpt::svf::Mode::highPass, 2000.0f, 0.5f);
+        filterHighPassR = std::filters::tpt::svf::Processor(std::filters::tpt::svf::Mode::highPass, 2000.0f, 0.5f);
+
+        noiseGeneratorWhite = std::noise::White;
+        noiseGeneratorPink = std::noise::Pink;
+        noiseGeneratorBrown = std::noise::Brown;
+    }
+
+
+
+    const int32 NUM_ROWS = 16;
+    Instrument::MtxRow[NUM_ROWS] rows;
+
+    Instrument::Params params; // ??????
+    float32 lfoPhase = 0.0f;
+    float32 osc1PreviousPhase = 0.0f;
+    float32[Instrument::MtxDestination::SIZE] matrixDestOut;
+    float32 velocity = 0.0f;
+    float32 keytrack = 0.0f;
+    
+
+    void init() {
+        for (wrap<NUM_ROWS> i) {
+            rows[i].source = Instrument::MtxSource::NONE;
+            rows[i].multiplier = 1.0f;
+            rows[i].dest1 = Instrument::MtxDestination::NONE;
+            rows[i].dest2 = Instrument::MtxDestination::NONE;
+        }
+    }
+
+
+    event eventIn (std::notes::NoteOn e)
+    {
+        float32 baseFreq = std::notes::noteToFrequency (e.pitch);
+        for (wrap<3> i) {
+            oscillator[i].frequencyIn <- baseFreq;            
+        }
+        for (wrap<3> i) {
+            envelopes[i].eventIn <- e;
+            lfos[i].resetRampIn <- void;  // Trigger LFO ramp reset on note on
+        }
+        velocity = e.velocity;
+        keytrack = (e.pitch - 64.0f) / 64.0f; 
+    }
+
+    event eventIn (std::notes::NoteOff e)
+    {
+        for (wrap<3> i) {
+            envelopes[i].eventIn <- e;
+        }
+    }
+
+
+    event paramsIn (Instrument::Params paramsIn) {
+        params = paramsIn;
+                      
+        // Filter
+        filterLowPassL.frequency <- paramsIn.filterCutoff;
+        filterLowPassL.q <- paramsIn.filterResonance;
+        filterHighPassL.frequency <- paramsIn.filterCutoff;
+        filterHighPassL.q <- paramsIn.filterResonance;
+        filterLowPassR.frequency <- paramsIn.filterCutoff;
+        filterLowPassR.q <- paramsIn.filterResonance;
+        filterHighPassR.frequency <- paramsIn.filterCutoff;
+        filterHighPassR.q <- paramsIn.filterResonance;        
+    }
+
+    event oscParamsIn (Instrument::OscParams oscParamsIn) {
+        oscillator.at(oscParamsIn.index).oscParamsIn <- oscParamsIn;
+    }
+
+    event mtxSourceUpdateIn (Instrument::MtxSourceUpdate mtxSourceUpdate) {
+        rows.at(mtxSourceUpdate.index).source = mtxSourceUpdate.source;     
+    }
+
+    event mtxMultiplierUpdateIn (Instrument::MtxMultiplierUpdate mtxMultiplierUpdate) {
+        rows.at(mtxMultiplierUpdate.index).multiplier = mtxMultiplierUpdate.multiplier;     
+    }
+
+    event mtxDest1UpdateIn (Instrument::MtxDestination1Update mtxDest1Update) {
+        rows.at(mtxDest1Update.index).dest1 = mtxDest1Update.dest1;     
+    }
+
+    event mtxDest2UpdateIn (Instrument::MtxDestination2Update mtxDest2Update) {
+        rows.at(mtxDest2Update.index).dest2 = mtxDest2Update.dest2;     
+    }
+    
+    event envParamsIn (Instrument::EnvParams envParamsIn) {
+        envelopes.at(envParamsIn.index).envParamsIn <- envParamsIn;
+    }
+
+    event lfoParamsIn (Instrument::LfoParams lfoParamsIn) {
+        lfos.at(lfoParamsIn.index).shapeIn <- lfoParamsIn.shape;
+        lfos.at(lfoParamsIn.index).rateIn <- lfoParamsIn.rate;
+        lfos.at(lfoParamsIn.index).rampIn <- lfoParamsIn.ramp;
+    } 
+
+    void computeMatrix() {
+        // Matrix computation handled in Matrix processor
+
+        // Reset destinations
+        for (wrap<Instrument::MtxDestination::SIZE> j) {
+            matrixDestOut[j] = 0.0f;  
+        }
+        
+
+        // Process each row
+        for (wrap<NUM_ROWS> i) {
+            Instrument::MtxRow row = rows.at(i);
+            if (row.multiplier != 0.0f && row.source != Instrument::MtxSource::NONE && (row.dest1 != Instrument::MtxDestination::NONE || row.dest2 != Instrument::MtxDestination::NONE)) {
+                float32 sourceValue = 0.0f;
+
+                if (row.source >= Instrument::MtxSource::LFO1 && row.source <= Instrument::MtxSource::LFO3) {
+                    wrap<3> lfoIndex = wrap<3>(row.source - Instrument::MtxSource::LFO1);
+                    sourceValue = lfos.at(lfoIndex).out;
+                } else if (row.source >= Instrument::MtxSource::ENV1 && row.source <= Instrument::MtxSource::ENV3) {
+                    wrap<3> envIndex = wrap<3>(row.source - Instrument::MtxSource::ENV1);
+                    sourceValue = envelopes.at(envIndex).gainOut;
+                } else if (row.source == Instrument::MtxSource::VELOCITY) {
+                    sourceValue = velocity; 
+                } else if (row.source == Instrument::MtxSource::KEYTRACK) {
+                    sourceValue = keytrack; 
+                }
+                float32 modulatedValue = sourceValue * row.multiplier;
+
+                wrap<Instrument::MtxDestination::SIZE> dest1 = wrap<Instrument::MtxDestination::SIZE>(row.dest1);
+                wrap<Instrument::MtxDestination::SIZE> dest2 = wrap<Instrument::MtxDestination::SIZE>(row.dest2);
+
+                matrixDestOut[dest1] += modulatedValue;
+                matrixDestOut[dest2] += modulatedValue;
+            }
+        }
+
+        for (wrap<3> i) {
+            envelopes.at(i).advance();
+            lfos.at(i).advance();
+        }   
+
+    }
+
+    void main() {
+        loop {
+            if (envelopes[0].stateOut == 0) {
+                audioOut <- float<2>(0, 0);
+            } else {
+                float[3] panModulation;
+                computeMatrix();
+
+
+
+                for (wrap<3> i) {
+                    wrap<Instrument::MtxDestination::SIZE> destWaveShape = wrap<Instrument::MtxDestination::SIZE>(Instrument::MtxDestination::OSC1_WAVESHAPE + i);
+                    oscillator[i].waveShapeModulationIn <- matrixDestOut[destWaveShape];
+
+                    wrap<Instrument::MtxDestination::SIZE> destPitch = wrap<Instrument::MtxDestination::SIZE>(Instrument::MtxDestination::OSC1_PITCH + i);
+                    oscillator[i].pitchModulationIn <- matrixDestOut[destPitch];
+
+                    wrap<Instrument::MtxDestination::SIZE> destPan = wrap<Instrument::MtxDestination::SIZE>(Instrument::MtxDestination::OSC1_PAN + i);
+                    oscillator[i].panModulationIn <- matrixDestOut[destPan];
+
+                    wrap<Instrument::MtxDestination::SIZE> destGain = wrap<Instrument::MtxDestination::SIZE>(Instrument::MtxDestination::OSC1_GAIN + i);
+                    oscillator[i].gainModulationIn <- matrixDestOut[destGain];
+
+                    wrap<Instrument::MtxDestination::SIZE> destLFO = wrap<Instrument::MtxDestination::SIZE>(Instrument::MtxDestination::LFO1_RATE + i);
+                    if (matrixDestOut[destLFO] != 0.0f) {
+                        lfos.at(i).rateModulationIn <- matrixDestOut[destLFO];  // Scale modulation to 0-10 Hz
+                    }
+                }
+
+                // Handle oscillator sync: reset OSC2 phase when OSC1 wraps
+                if (oscillator[1].oscSyncOut == 1) {
+                    if (osc1PreviousPhase > oscillator[0].phaseOut) {
+                        oscillator[1].resetPhaseIn <- void ;
+                    }
+                }
+
+                osc1PreviousPhase = oscillator[0].phaseOut;
+
+
+                // Calculate ring modulation signal of oscillator 2
+                float32 rmSignal = oscillator[0].beforeGainOut * oscillator[1].beforeGainOut * params.rmAmount;
+                oscillator[1].mixSignalIn <- rmSignal;
+
+                // Calculate and send noise to oscillator 3 if needed
+                if (params.osc3NoiseAmount > 0.0f) {
+                    float32 noise = 0.0f;
+                    
+                    if (params.osc3NoiseType == 0) {
+                        // White noise
+                        noise = noiseGeneratorWhite.out * 2.0f - 1.0f;
+                        noiseGeneratorWhite.advance();
+                    } else if (params.osc3NoiseType == 1) {
+                        // Pink noise
+                        noise = noiseGeneratorPink.out * 2.0f - 1.0f;
+                        noiseGeneratorPink.advance();
+                    } else if (params.osc3NoiseType == 2) {
+                        // Brown noise
+                        noise = noiseGeneratorBrown.out * 2.0f - 1.0f;
+                        noiseGeneratorBrown.advance();
+                    }
+                    
+                    // Send (noise - oscillator) * amount to crossfade between oscillator and noise
+                    // Result: (sample + (noise - sample) * amount) * gain = (sample * (1-amount) + noise * amount) * gain
+                    // This ensures both oscillator and noise get the same gain and saturation applied
+                    oscillator[2].mixSignalIn <- (noise - oscillator[2].beforeGainOut) * params.osc3NoiseAmount;
+                } else {
+                    // No noise, send zero
+                    oscillator[2].mixSignalIn <- 0.0f;
+                }
+                               
+                // Pan each oscillator to stereo using equal-power panning (optimized with sqrt)
+                float<2> mixedOscillators = float<2>(0.0f, 0.0f);
+
+                for (wrap<3> i) {
+                    float panValue = oscillator[i].panOut / 100.0f;  // Normalize -1 to 1
+                    float leftGain = sqrt((1.0f - panValue) * 0.5f);
+                    float rightGain = sqrt((1.0f + panValue) * 0.5f);
+                    
+                    mixedOscillators[0] += oscillator[i].audioOut * leftGain;
+                    mixedOscillators[1] += oscillator[i].audioOut * rightGain;
+                }
+
+                oscillator[0].advance();
+                oscillator[1].advance();
+                oscillator[2].advance();
+
+                
+                // Calculate Cutoff modulation
+                float32 cutOffModulation =  matrixDestOut[Instrument::MtxDestination::FILTER_CUTOFF] * 1000.0f;
+                float32 resonanceModulation = matrixDestOut[Instrument::MtxDestination::FILTER_RESONANCE];
+                                                
+                // Pass through appropriate filter based on type (process stereo)
+                float<2> filteredSignal;
+                if (params.filterType == 0) {
+                    float32 modulatedCutoff = clamp(params.filterCutoff + cutOffModulation, 20.0f, 20000.0f);
+                    filterLowPassL.frequency <- modulatedCutoff;
+                    filterLowPassR.frequency <- modulatedCutoff;
+                    filterLowPassL.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
+                    filterLowPassR.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
+                    filterLowPassL.in <- mixedOscillators[0];
+                    filterLowPassR.in <- mixedOscillators[1];
+                    filteredSignal[0] = filterLowPassL.out;
+                    filteredSignal[1] = filterLowPassR.out;
+                    filterLowPassL.advance();
+                    filterLowPassR.advance();
+                } else {
+                    float32 modulatedCutoff = clamp(params.filterCutoff + cutOffModulation, 20.0f, 20000.0f);
+                    filterHighPassL.frequency <- modulatedCutoff;
+                    filterHighPassR.frequency <- modulatedCutoff;
+                    filterHighPassL.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
+                    filterHighPassR.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
+                    filterHighPassL.in <- mixedOscillators[0];
+                    filterHighPassR.in <- mixedOscillators[1];
+                    filteredSignal[0] = filterHighPassL.out;
+                    filteredSignal[1] = filterHighPassR.out;
+                    filterHighPassL.advance();
+                    filterHighPassR.advance();
+                }
+                
+                // Apply envelope and volume (stereo) using Envelope 1
+                float<2> envelopedSignal = float<2>(envelopes[0].gainOut * filteredSignal[0] * params.mainGain,
+                                                    envelopes[0].gainOut * filteredSignal[1] * params.mainGain);                                  
+                audioOut <- envelopedSignal;
+            }
+            advance();
+        }
+    }
+
+}
+
+
+processor Saturator
+{
+    input stream float32 audioIn;
+    output stream float32 audioOut;
+    
+    input event float32 driveIn;
+    input event int typeIn;
+    
+    float32 drive = 1.0f;
+    int type = 0;
+    const float32 twopi = 2.0f * 3.14159f;
+    
+    event driveIn (float32 d) {
+        drive = d;
+    }
+    
+    event typeIn (int t) {
+        type = t;
+    }
+    
+    void main() {
+        loop {
+            float32 inSig = audioIn;
+            float32 outSig = inSig;
+            
+            if (type != 0) {
+                
+                if (type == 1) {
+                    // Convert 0-1 amount to drive (1.0-6.0)
+                    float32 actualDrive = 1.0f + drive * 5.0f;
+                    // Asymmetric (tube-style): tanh + linear component for even harmonics
+                    float32 x = inSig * actualDrive;
+                    outSig = (tanh(x) + 0.1f * x) / (1.0f + 0.1f * actualDrive);
+                }
+                else if (type == 2) {
+                    // Wavefolder: folds the waveform back on itself for complex harmonics
+                    float32 actualDrive = 0.5f + drive * 5.0f;
+                    float32 x = inSig * actualDrive;
+                    // Fold the signal using modulo and reflection
+                    float32 folded = fmod(abs(x), 2.0f);
+                    if (folded > 1.0f) {
+                        folded = 2.0f - folded;
+                    }
+                    outSig = (folded - 0.5f) / (1.0f + actualDrive * 0.5f);
+                }
+                else if (type == 3) {
+                    float32 actualDrive = 1.0f + drive * 2.0f;
+                    outSig = float32(inSig + actualDrive / twoPi * sin (twopi * inSig));
+                }
+                else if (type == 4) {
+                }
+            }
+            
+            audioOut <- outSig;
+            advance();
+        }
+    }
+}
+
+
+processor StereoSpread 
+{
+    input stream float<2> audioIn;
+    output stream float<2> audioOut;
+    
+    input event float32 spreadAmount;
+
+    float stereoSpread;
+    
+    event spreadAmount (float32 a) {
+        stereoSpread = a;
+    }
+
+    void main() {
+        loop {
+            // Apply stereo spread (mid-side processing)
+            float32 mid = (audioIn[0] + audioIn[1]) * 0.5f;
+            float32 side = (audioIn[0] - audioIn[1]) * 0.5f;
+
+            audioOut <- float<2>(mid + side * stereoSpread,
+                                 mid - side * stereoSpread);
+            advance();
+        }
+    }
+}
+
+
+
+processor Chorus
+{
+    // Chorus implemented by Claude
+    input stream float<2> audioIn;
+    output stream float<2> audioOut;
+    
+    input event float32 amountIn;
+    
+    float32 amount = 0.0f;
+    
+    // Chorus parameters
+    let maxDelayMs = 60.0f;
+
+    let baseDelayMs = float[4] (15, 25, 35, 45 );
+    let modDepthMs = float[4] (2.5, 3.5, 3.5, 2.5);
+    let lfoRate = float[4] ( 0.8f, 0.9f, 1.0f, 1.1f);
+    
+    // Calculate delay buffer size
+    // let maxDelaySamples = int(float(processor.frequency) * maxDelayMs / 1000.0f);
+    const int32 maxDelaySamples =  int(48000.0f * maxDelayMs / 1000.0f); // Fixed size for efficiency
+    float32[maxDelaySamples] delayBufferL;
+    float32[maxDelaySamples] delayBufferR;
+    int writePos = 0;
+    
+    float32[4] lfoPhase = (0.0f, 0.25f, 0.5f, 0.75f);
+
+    let lfoInc = float[4] (lfoRate[0] / float32(processor.frequency), lfoRate[1] / float32(processor.frequency),
+        lfoRate[2] / float32(processor.frequency), lfoRate[3] / float32(processor.frequency));
+
+
+    event amountIn (float32 a) {
+        amount = a;
+    }
+    
+    void main() {
+        loop {
+            // Write input to delay buffers
+            if (amount > 0) {
+                delayBufferL.at(writePos) = audioIn[0];
+                delayBufferR.at(writePos) = audioIn[1];
+                
+                float32 wetL = 0.0f;
+                float32 wetR = 0.0f;
+
+                for (int i = 0; i< 4; i++) {
+                    lfoPhase.at(i) = fmod(lfoPhase.at(i) + lfoInc.at(i), 1.0f);
+
+                    // Calculate modulated delay times
+                    float32 lfoVal = sin(lfoPhase.at(i) * float32(twoPi));
+                    float32 delayMs = baseDelayMs.at(i) + lfoVal * modDepthMs.at(i);
+                    // Convert to samples
+                    float32 delaySamples = delayMs * float32(processor.frequency) / 1000.0f;
+                
+                    // Calculate read positions with linear interpolation
+                    float32 readPos = float32(writePos) - delaySamples;
+                    if (readPos < 0.0f) readPos += float32(maxDelaySamples);
+
+                    // Linear interpolation for smoother modulation
+                    int readIdx = int(readPos) % maxDelaySamples;
+                    int readIdxNext = (readIdx + 1) % maxDelaySamples;
+                    float32 frac = readPos - floor(readPos);
+                                        
+                    // Read from delay buffers with interpolation
+                    float32 delayedL = delayBufferL.at(readIdx) * (1.0f - frac) + delayBufferL.at(readIdxNext) * frac;
+                    float32 delayedR = delayBufferR.at(readIdx) * (1.0f - frac) + delayBufferR.at(readIdxNext) * frac;
+                    
+                    // Mix the chorus voices
+                    wetL += delayedL * 0.25f;
+                    wetR += delayedR * 0.25f;
+                }
+
+               
+                // Dry/wet mix based on amount (0 = dry, 1 = wet)
+                float32 outL = audioIn[0] * (1.0f - amount/2) + wetL * amount;
+                float32 outR = audioIn[1] * (1.0f - amount/2) + wetR * amount;
+                
+                audioOut <- float<2>(outL, outR);
+                
+                // Advance write position
+                writePos = (writePos + 1) % maxDelaySamples;
+            } else {
+                audioOut <- audioIn;            
+            }
+            advance();
+        }
+    }
+}

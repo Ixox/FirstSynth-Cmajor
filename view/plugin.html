@@ -1,0 +1,317 @@
+<link rel="stylesheet" href="view/plugin.css">
+
+<div class="synth-container">
+  <div class="synth-header">
+    <div class="cmajor-logo">
+      <svg class="cmajor-c" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <!-- Circular C shape - symmetric with same x endpoints -->
+        <path d="M 17 5.5 A 8.5 8.5 0 1 0 17 18.5" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2" 
+              stroke-linecap="round"/>
+        <!-- Piano keys: 2 vertical lines touching the C curve -->
+        <!-- Left key at x=8.5 - full height -->
+        <line x1="8.5" y1="3.5" x2="8.5" y2="12" stroke="currentColor" stroke-width="2.5"/>
+        <line x1="8.5" y1="12" x2="8.5" y2="20.5" stroke="currentColor" stroke-width="1"/>
+        <!-- Right key at x=13 - full height -->
+        <line x1="13" y1="3.5" x2="13" y2="12" stroke="currentColor" stroke-width="2.5"/>
+        <line x1="13" y1="12" x2="13" y2="20.5" stroke="currentColor" stroke-width="1"/>
+      </svg>
+      <span class="cmajor-text">major</span>
+    </div>
+    <div class="synth-title">FirstSynth</div>
+    <div class="synth-author">Xavier Hosxe (c) 2026</div>
+  </div>
+  <!-- Row 1: Oscillators and Filter -->
+  <div class="modules-row">
+    <!-- Oscillator 1 -->
+    <div class="module blue">
+      <div class="module-header">OSC 1</div>
+      <div class="module-content">
+        <div class="control-group center">
+          <canvas class="control-canvas waveshape" id="osc1WaveshapeIn-knob"></canvas>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Transpose</div>
+            <canvas class="control-canvas" id="osc1Transpose-canvas"></canvas>
+          </div>
+          <div class="control">
+            <div class="control-label">Detune</div>
+            <canvas class="control-canvas" id="osc1Detune-canvas"></canvas>
+          </div>
+          <div class="control">
+            <div class="control-label">Pan</div>
+            <canvas class="control-canvas" id="osc1Pan-canvas"></canvas>
+          </div>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Gain</div>
+            <canvas class="control-canvas" id="osc1Gain-canvas"></canvas>
+          </div>
+          <div class="control">
+            <button class="control-button" id="osc1SaturationType-button">Tube</button>
+            <canvas class="control-canvas" id="osc1Saturation-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Oscillator 2 -->
+    <div class="module green">
+      <div class="module-header">OSC 2</div>
+      <div class="module-content">
+        <div class="control-group center horizontal">
+          <canvas class="control-canvas waveshape" id="osc2WaveshapeIn-knob"></canvas>
+          <button class="control-button" id="osc2-sync-button">SYNC</button>
+          <div class="control">
+            <div class="control-label">RM</div>
+            <canvas class="control-canvas" id="rmAmount-canvas"></canvas>
+          </div>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Transpose</div>
+            <canvas class="control-canvas" id="osc2Transpose-canvas"></canvas>
+          </div>
+          <div class="control">
+            <div class="control-label">Detune</div>
+            <canvas class="control-canvas" id="osc2Detune-canvas"></canvas>
+          </div>
+          <div class="control">
+            <div class="control-label">Pan</div>
+            <canvas class="control-canvas" id="osc2Pan-canvas"></canvas>
+          </div>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Gain</div>
+            <canvas class="control-canvas" id="osc2Gain-canvas"></canvas>
+          </div>
+          <div class="control">
+            <button class="control-button" id="osc2SaturationType-button">Tube</button>
+            <canvas class="control-canvas" id="osc2Saturation-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Oscillator 3 -->
+    <div class="module orange">
+      <div class="module-header">OSC 3</div>
+      <div class="module-content">
+        <div class="control-group horizontal">
+          <canvas class="control-canvas waveshape" id="osc3WaveshapeIn-knob"></canvas>
+          <div class="control">
+            <div class="control-label">Mix S/N</div>
+            <canvas class="control-canvas" id="osc3NoiseAmount-canvas"></canvas>
+          </div>
+          <div class="control-group vertical noise-type-group">
+            <button class="control-button noise-type-btn" id="osc3NoiseType-white-button">white</button>
+            <button class="control-button noise-type-btn" id="osc3NoiseType-pink-button">pink</button>
+            <button class="control-button noise-type-btn" id="osc3NoiseType-brown-button">brown</button>
+          </div>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Transpose</div>
+            <canvas class="control-canvas" id="osc3Transpose-canvas"></canvas>
+          </div>
+          <div class="control">
+            <div class="control-label">Detune</div>
+            <canvas class="control-canvas" id="osc3Detune-canvas"></canvas>
+          </div>
+          <div class="control">
+            <div class="control-label">Pan</div>
+            <canvas class="control-canvas" id="osc3Pan-canvas"></canvas>
+          </div>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Gain</div>
+            <canvas class="control-canvas" id="osc3Gain-canvas"></canvas>
+          </div>
+          <div class="control">
+            <button class="control-button" id="osc3SaturationType-button">Tube</button>
+            <canvas class="control-canvas" id="osc3Saturation-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filter -->
+    <div class="module yellow">
+      <div class="module-header">Filter</div>
+      <div class="module-content">
+        <canvas class="visualization-canvas" id="filter-visualization-canvas"></canvas>
+        <div class="control-group horizontal">
+          <div class="control small">
+            <div class="control-label">Type</div>
+            <select id="filterTypeSelect" class="filter-type-select">
+              <option value="0" selected>Low Pass</option>
+              <option value="1">High Pass</option>
+            </select>
+          </div>
+          <div class="control small">
+            <div class="control-label">Cutoff</div>
+            <canvas class="control-canvas small" id="filterCutoff-canvas"></canvas>
+          </div>
+          <div class="control small">
+            <div class="control-label">Resonance</div>
+            <canvas class="control-canvas small" id="filterResonance-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 2: Matrix Modulation (split left/right) -->
+  <div class="modules-row matrix-row">
+    <div class="module gray matrix-module">
+      <div class="module-header">Matrix Modulation</div>
+      <div class="module-content matrix-content">
+        <div class="matrix-columns-wrapper">
+          <!-- Left: Rows 1-4 -->
+          <div class="matrix-column-left">
+            <div class="matrix-grid">
+              <div class="matrix-header">Row</div>
+              <div class="matrix-header">Src</div>
+              <div class="matrix-header">Mul</div>
+              <div class="matrix-header">D1</div>  
+              <div class="matrix-header">D2</div>
+              <!-- Rows 1-4 will be generated by JavaScript -->
+            </div>
+          </div>
+          <!-- Right: Rows 5-8 -->
+          <div class="matrix-column-right">
+            <div class="matrix-grid">
+              <div class="matrix-header">Row</div>
+              <div class="matrix-header">Src</div>
+              <div class="matrix-header">Mul</div>
+              <div class="matrix-header">D1</div>  
+              <div class="matrix-header">D2</div>
+              <!-- Rows 5-8 will be generated by JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row 3: Envelopes, LFOs, and Master -->
+  <div class="modules-row">
+    <!-- Envelope -->
+    <div class="module red">
+      <div class="module-header">
+        <span>Envelopes</span>
+        <div class="envelope-selector">
+          <button class="selector-btn active" data-env="1">1</button>
+          <button class="selector-btn" data-env="2">2</button>
+          <button class="selector-btn" data-env="3">3</button>
+        </div>
+      </div>
+      <div class="module-content envelope-container">
+        <div class="envelope-canvas-wrapper">
+          <canvas class="visualization-canvas" id="envelope-canvas"></canvas>
+          <div class="envelope-cross" draggable="true" title="Drag to assign this envelope to a knob">
+            <svg viewBox="0 0 24 24" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+              <!-- Vertical line -->
+              <line x1="12" y1="2" x2="12" y2="22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <!-- Horizontal line -->
+              <line x1="2" y1="12" x2="22" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <!-- Center circle -->
+              <circle cx="12" cy="12" r="2" fill="currentColor"/>
+              <!-- Up arrow -->
+              <polygon points="12,3 10,6 14,6" fill="currentColor"/>
+              <!-- Down arrow -->
+              <polygon points="12,21 10,18 14,18" fill="currentColor"/>
+              <!-- Left arrow -->
+              <polygon points="3,12 6,10 6,14" fill="currentColor"/>
+              <!-- Right arrow -->
+              <polygon points="21,12 18,10 18,14" fill="currentColor"/>
+            </svg>
+          </div>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control small">
+            <div class="control-label">Attack</div>
+            <canvas class="control-canvas small" id="envAttack-canvas"></canvas>
+          </div>
+          <div class="control small">
+            <div class="control-label">Decay</div>
+            <canvas class="control-canvas small" id="envDecay-canvas"></canvas>
+          </div>
+          <div class="control small">
+            <div class="control-label">Sustain</div>
+            <canvas class="control-canvas small" id="envSustain-canvas"></canvas>
+          </div>
+          <div class="control small">
+            <div class="control-label">Release</div>
+            <canvas class="control-canvas small" id="envRelease-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LFO -->
+    <div class="module cyan">
+      <div class="module-header">
+        <span>LFOs</span>
+        <div class="lfo-selector">
+          <button class="selector-btn active" data-lfo="1">1</button>
+          <button class="selector-btn" data-lfo="2">2</button>
+          <button class="selector-btn" data-lfo="3">3</button>
+        </div>
+      </div>
+      <div class="module-content">
+        <canvas class="visualization-canvas" id="lfo-canvas"></canvas>
+        <div class="control-group horizontal">
+          <div class="control small">
+            <div class="control-label">WaveShape</div>
+            <select id="lfoWaveShape-select" class="lfo-waveshape-select">
+              <option value="0">Sine</option>
+              <option value="1">Triangle</option>
+              <option value="2">Square</option>
+              <option value="3">SawUp</option>
+              <option value="4">SawDown</option>
+              <option value="5">Random</option>
+            </select>
+          </div>
+          <div class="control small">
+            <div class="control-label">Rate</div>
+            <canvas class="control-canvas small" id="lfoRate-canvas"></canvas>
+          </div>
+          <div class="control small">
+            <div class="control-label">Ramp</div>
+            <canvas class="control-canvas small" id="lfoRamp-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Master -->
+    <div class="module pink">
+      <div class="module-header">Master</div>
+      <div class="module-content">
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Spread</div>
+            <canvas class="control-canvas" id="stereoSpread-canvas"></canvas>
+          </div>
+          <div class="control">
+            <div class="control-label">Chorus</div>
+            <canvas class="control-canvas" id="chorusAmount-canvas"></canvas>
+          </div>
+        </div>
+        <div class="control-group horizontal">
+          <div class="control">
+            <div class="control-label">Volume</div>
+            <canvas class="control-canvas" id="mainGain-canvas"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

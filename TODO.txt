@@ -1,0 +1,4 @@
+. Automorph Rate : step should be 0.1
+. HTML : color button in each panel
+. Use std::oscillators:LFO for Filter LFO
+. Filter: add 'None' option

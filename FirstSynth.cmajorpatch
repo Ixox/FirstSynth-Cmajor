@@ -1,0 +1,19 @@
+
+{
+    "CmajorVersion":    1,
+    "ID":               "com.Ixox.FirstSynth",
+    "version":          "0.1",
+    "name":             "FirstSynth",
+    "description":      "A simple synthesizer patch 2.",
+    "category":         "generator",
+    "manufacturer":     "Ixox",
+    "isInstrument":     true,
+
+    "source":           "FirstSynth.cmajor",
+    "worker":           "worker/worker.js",
+
+    "view":             { "src": "view/index.js",
+                          "width": 1024,
+                          "height": 820,
+                          "resizable": true }
+}
