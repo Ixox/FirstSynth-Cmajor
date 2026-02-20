@@ -91,8 +91,9 @@ export class WaveShapeKnob {
     drawWaveshapeKnob(value) {
         const centerX = 40;
         const centerY = 40;
-        const radius = 12;
-        const iconDistance = 30;
+        const knobRadius = 14;
+        const outerRadius = 18;
+        const iconDistance = 24;
         
         this.ctx.clearRect(0, 0, 80, 80);
         
@@ -113,31 +114,38 @@ export class WaveShapeKnob {
             wf.draw(this.ctx, x, y, intensity);
         });
         
-        // Draw outer circle
-        this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-        this.ctx.strokeStyle = this.knobColor;
-        this.ctx.lineWidth = 3;
-        this.ctx.stroke();
         
-        // Draw pointer - angle based on value (0-99 mapped to 0-360 degrees)
+        // Draw inner knob body with shadow
+        this.ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        this.ctx.shadowBlur = 5;
+        this.ctx.shadowOffsetY = 2;
+        this.ctx.shadowOffsetX = 1;
+        
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, knobRadius, 0, 2 * Math.PI);
+        this.ctx.fillStyle = "#cce6e7";
+        this.ctx.fill();
+        
+        this.ctx.shadowColor = 'transparent';
+        
+        // Draw position indicator - longer pointer extending outside circle
         const pointerAngle = ((value / 99) * 2 * Math.PI) - Math.PI / 2;
-        const pointerLength = radius + 5;
+        const pointerLength = knobRadius + 2; 
         const pointerX = centerX + Math.cos(pointerAngle) * pointerLength;
         const pointerY = centerY + Math.sin(pointerAngle) * pointerLength;
         
         this.ctx.beginPath();
         this.ctx.moveTo(centerX, centerY);
         this.ctx.lineTo(pointerX, pointerY);
-        this.ctx.strokeStyle = '#c5ccecff';
-        this.ctx.lineWidth = 3;
+        this.ctx.strokeStyle = this.knobColor;
+        this.ctx.lineWidth = 2;
         this.ctx.lineCap = 'round';
         this.ctx.stroke();
         
-        // Draw center circle
+        // Draw center dot
         this.ctx.beginPath();
-        this.ctx.arc(centerX, centerY, 3, 0, 2 * Math.PI);
-        this.ctx.fillStyle = '#c5ccecff';
+        this.ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
+        this.ctx.fillStyle = this.knobColor;
         this.ctx.fill();
     };
 

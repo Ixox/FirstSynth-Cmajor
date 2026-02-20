@@ -4,17 +4,23 @@ export class Filter {
         this.ctx = this.canvas.getContext('2d');
         this.parentView = parentView;
         
-        // Set canvas size
-        this.canvas.width = 280;
-        this.canvas.height = 120;
-        
         // State
         this.filterType = 0; // 0 = low pass, 1 = high pass
         this.cutoff = 2000;
         this.resonance = 50;
         
         // Initial draw
-        this.draw();
+        this.requestDraw();
+    }
+
+    requestDraw() {
+        if (!this.drawRequested) {
+            this.drawRequested = true;
+            requestAnimationFrame(() => {
+                this.drawRequested = false;
+                this.draw();
+            });
+        }
     }
     
     updateValue(paramName, value) {
@@ -33,33 +39,59 @@ export class Filter {
     }
     
     draw() {
-        const { ctx, canvas } = this;
+        if (!this.canvas) return;
+        
+        const rect = this.canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        
+        if (rect.width > 0 && rect.height > 0) {
+            const targetWidth = Math.floor(rect.width * dpr);
+            const targetHeight = Math.floor(rect.height * dpr);
+            
+            if (this.canvas.width !== targetWidth || this.canvas.height !== targetHeight) {
+                this.canvas.width = targetWidth;
+                this.canvas.height = targetHeight;
+            }
+        } else {
+            // Re-schedule if still zero size
+            this.requestDraw();
+            return;
+        }
+
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+        this.ctx.save();
+        this.ctx.scale(dpr, dpr);
+        
+        const logicalWidth = width / dpr;
+        const logicalHeight = height / dpr;
         
         // Clear canvas
-        ctx.fillStyle = '#1a2a3a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        this.ctx.fillStyle = '#1a2a3a';
+        this.ctx.fillRect(0, 0, logicalWidth, logicalHeight);
         
         // Draw border
-        ctx.strokeStyle = '#4a6a8a';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        this.ctx.strokeStyle = '#4a6a8a';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(0, 0, logicalWidth, logicalHeight);
         
         // Draw reference lines
-        this.drawReferenceLines();
+        this.drawReferenceLines(logicalWidth, logicalHeight);
         
         // Draw frequency response curve
-        this.drawFrequencyResponse();        
+        this.drawFrequencyResponse(logicalWidth, logicalHeight);
+        
+        this.ctx.restore();
     }
     
-    drawFrequencyResponse() {
-        const { ctx, canvas } = this;
+    drawFrequencyResponse(logicalWidth, logicalHeight) {
+        const { ctx } = this;
         const paddingX = 0;
         const paddingTop = 40;
         const paddingBottom = 5;
-       
 
-        const graphWidth = canvas.width - paddingX * 2;
-        const graphHeight = canvas.height - paddingTop - paddingBottom;
+        const graphWidth = logicalWidth - paddingX * 2;
+        const graphHeight = logicalHeight - paddingTop - paddingBottom;
         const startX = paddingX;
         const startY = paddingTop;       
         
@@ -68,7 +100,7 @@ export class Filter {
         ctx.lineWidth = 2;
         ctx.beginPath();
         
-        const sampleCount = 300;
+        const sampleCount = 280;
         for (let i = 0; i <= sampleCount; i++) {
             // Frequency from 20Hz to 20000Hz (log scale)
             const freqRatio = i / sampleCount;
@@ -92,14 +124,14 @@ export class Filter {
         ctx.stroke();
     }
     
-    drawReferenceLines() {
-        const { ctx, canvas } = this;
+    drawReferenceLines(logicalWidth, logicalHeight) {
+        const { ctx } = this;
         const paddingX = 0;
         const paddingTop = 40;
         const paddingBottom = 15;
         
-        const graphWidth = canvas.width - paddingX * 2;
-        const graphHeight = canvas.height - paddingTop - paddingBottom;
+        const graphWidth = logicalWidth - paddingX * 2;
+        const graphHeight = logicalHeight - paddingTop - paddingBottom;
         const startX = paddingX;
         const startY = paddingTop;
         
@@ -133,7 +165,7 @@ export class Filter {
             ctx.fillStyle = 'rgba(100, 150, 200, 0.8)';
             ctx.font = '11px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(label, x, canvas.height - 2);
+            ctx.fillText(label, x, logicalHeight - 2);
             ctx.setLineDash([4, 4]); // Resume dashed pattern
         });
         

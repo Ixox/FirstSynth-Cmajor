@@ -2,6 +2,7 @@
 
 <div class="synth-container">
   <div class="synth-header">
+    <div class="synth-title">FirstSynth</div>
     <div class="cmajor-logo">
       <svg class="cmajor-c" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <!-- Circular C shape - symmetric with same x endpoints -->
@@ -20,9 +21,23 @@
       </svg>
       <span class="cmajor-text">major</span>
     </div>
-    <div class="synth-title">FirstSynth</div>
-    <div class="synth-author">Xavier Hosxe (c) 2026</div>
+
+    <!-- Center: Preset and Title -->
+    <div class="header-center">
+      <div class="preset-selector">
+        <label for="preset-list">Preset:</label>
+        <select id="preset-list">
+          <option value="">-- Loading presets --</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Right: Author -->
+    <div class="header-right">
+      <div class="synth-author">Xavier Hosxe (c) 2026</div>
+    </div>
   </div>
+
   <!-- Row 1: Oscillators and Filter -->
   <div class="modules-row">
     <!-- Oscillator 1 -->

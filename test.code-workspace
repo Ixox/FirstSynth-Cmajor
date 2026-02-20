@@ -2,6 +2,9 @@
 	"folders": [
 		{
 			"path": "."
+		},
+		{
+			"path": "../cmajor/examples/patches/Pro54"
 		}
 	],
 	"settings": {}

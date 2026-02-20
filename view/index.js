@@ -5,6 +5,7 @@ import { Envelope } from './gui/Envelope.js';
 import { LFO } from './gui/LFO.js';
 import { DraggableModulator } from './gui/DraggableModulator.js';
 import { Filter } from './gui/Filter.js';
+import { PresetBank } from './gui/presets/presetBank.js';
 
 // Matrix Modulation Enums
 const MtxSource = {
@@ -145,6 +146,31 @@ class test_View extends HTMLElement
 
         // Initialize Filter Visualization
         this.filter = new Filter('filter-visualization-canvas', this);
+
+        // Initialize Preset Selector
+        this.presetBank = new PresetBank();
+        const presetSelect = this.querySelector('#preset-list');
+        if (presetSelect) {
+            // Clear the loading message
+            presetSelect.innerHTML = '';
+            
+            // Populate preset list
+            const presetList = this.presetBank.getPresetList();
+            presetList.forEach(preset => {
+                const option = document.createElement('option');
+                option.value = preset.index;
+                option.textContent = preset.name;
+                presetSelect.appendChild(option);
+            });
+            
+            // Add change event listener to load preset
+            presetSelect.addEventListener('change', (e) => {
+                const presetIndex = parseInt(e.target.value);
+                if (!isNaN(presetIndex)) {
+                    this.presetBank.sendParametersToPatchConnection(this.patchConnection, presetIndex);
+                }
+            });
+        }
 
         // Initialize All Hidden Parameter Listeners for Envelopes
         for (let i = 1; i <= 3; i++) {
