@@ -1,206 +1,286 @@
 /**
- * DraggableModulator
- * Handles drag-drop of envelope cross to knobs for modulation assignment
+ * Draggable Modulator - Generic Framework
+ * Handles drag-drop of various draggable sources (envelope, destinations) to configurable drop zones
  * 
  * Usage:
- * const modulator = new DraggableModulator(parentElement, onDropCallback);
+ * const dropZoneConfig = {
+ *   MATRIX_SOURCE: { selector: '.matrix-row', selectIndex: 0, valueResolver: (value) => {...} },
+ *   KNOB: { type: 'canvas', selector: '.control-canvas', valueResolver: (knobElement) => {...} }
+ * };
+ * const dragSourceConfig = {
+ *   'envelope': ['MATRIX_SOURCE'],
+ *   'destination': ['KNOB']
+ * };
+ * const modulator = new DraggableModulator(parentElement, dropZoneConfig, dragSourceConfig, onDropCallback);
  * 
  * Callback signature:
- * onDropCallback(envelopeNumber, knobId)
+ * onDropCallback(sourceType, zoneType, zoneId, element)
  */
 export class DraggableModulator {
-    constructor(parentElement, onDropCallback) {
+    constructor(parentElement, dropZoneConfig, dragSourceConfig, onDropCallback) {
         this.parent = parentElement;
+        this.dropZoneConfig = dropZoneConfig;
+        this.dragSourceConfig = dragSourceConfig;
         this.onDropCallback = onDropCallback;
-        this.knobRegistry = [];
+        this.dropZones = [];
         this.currentDragTarget = null;
-        this.currentEnvelopeNumber = null;
+        this.currentDragSource = null;  // Stores info about the drag source (type, data)
+        this.validZoneTypes = [];
         
-        // Initialize knob detection and drag/drop handlers
-        this.initKnobRegistry();
+        // Initialize drop zone detection and drag/drop handlers
+        this.initDropZoneRegistry();
         this.initDragDropHandlers();
     }
 
     /**
-     * Builds a registry of all knob canvases with their IDs
+     * Builds a registry of all drop zones based on configuration
      * Called once during initialization
      */
-    initKnobRegistry() {
-        // Get all knob canvases
-        const knobCanvases = this.parent.querySelectorAll('.control-canvas');
-        const modulableKnobs = "osc1Transpose osc1Pan osc2Transpose osc2Pan osc3Transpose osc3Pan filterCutoff".split(" ");
-        
-        modulableKnobs.forEach(knobId => {
-            const knobCanvases = this.parent.querySelectorAll(`.control-canvas[id='${knobId}-canvas']`);
-            if (knobCanvases.length === 0) {
-                console.warn(`[DraggableModulator] Knob canvas not found for ID: ${knobId}`);
-                return;
+    initDropZoneRegistry() {
+        // Iterate through each zone type in the config
+        Object.entries(this.dropZoneConfig).forEach(([zoneType, zoneConfig]) => {
+            // Handle canvas type zones (knobs)
+            if (zoneConfig.type === 'canvas') {
+                const canvases = this.parent.querySelectorAll(zoneConfig.selector);
+                let zoneId = 1;
+                
+                canvases.forEach(canvas => {
+                    const knobId = canvas.id ? canvas.id.replace(/-canvas|-knob$/, '') : `knob-${zoneId}`;
+                    
+                    // Skip this knob if it doesn't pass the filter
+                    if (zoneConfig.filter && !zoneConfig.filter(knobId)) {
+                        return;
+                    }
+                    
+                    this.dropZones.push({
+                        type: zoneType,
+                        id: zoneId,
+                        element: canvas,
+                        knobId: knobId,
+                        valueResolver: zoneConfig.valueResolver,
+                        isHighlighted: false
+                    });
+                    zoneId++;
+                });
+            } 
+            // Handle select type zones (matrix sources/destinations)
+            else {
+                const containers = this.parent.querySelectorAll(zoneConfig.selector);
+                let zoneId = 1;
+                
+                containers.forEach(container => {
+                    const selects = container.querySelectorAll('.matrix-select');
+                    if (selects.length <= zoneConfig.selectIndex) {
+                        console.warn(`[DraggableModulator] Select not found at index ${zoneConfig.selectIndex} for zone type ${zoneType}`);
+                        return;
+                    }
+                    
+                    const selectElement = selects[zoneConfig.selectIndex];
+                    this.dropZones.push({
+                        type: zoneType,
+                        id: zoneId,
+                        element: selectElement,
+                        valueResolver: zoneConfig.valueResolver,
+                        isHighlighted: false
+                    });
+                    
+                    zoneId++;
+                });
             }
-            const canvas = knobCanvases[0];
-            this.knobRegistry.push({
-                knobId: knobId,
-                canvas: canvas,
-                rect: null, // Will be cached during drag
-                isHighlighted: false
-            });
         });
         
-        console.log(`[DraggableModulator] Registered ${this.knobRegistry.length} knobs`);
+        console.log(`[DraggableModulator] Registered ${this.dropZones.length} drop zones`);
     }
 
     /**
-     * Initialize drag-drop event handlers for the cross element
+     * Initialize drag-drop event handlers for all draggable elements
      */
     initDragDropHandlers() {
+        // Handle envelope cross drag
         const cross = this.parent.querySelector('.envelope-cross');
+        if (cross) {
+            cross.addEventListener('dragstart', (e) => this.handleDragStart(e, 'envelope', this.parent.activeEnvIndex));
+            cross.addEventListener('dragend', (e) => this.handleDragEnd(e));
+        }
 
-        if (!cross) {
-            console.warn('[DraggableModulator] Cross element not found');
+        // Handle destination cross drags
+        const destCrosses = this.parent.querySelectorAll('.destination-cross');
+        destCrosses.forEach(cross => {
+            cross.addEventListener('dragstart', (e) => {
+                const rowIndex = parseInt(cross.dataset.rowIndex);
+                const destIndex = parseInt(cross.dataset.destIndex);
+                this.handleDragStart(e, 'destination', { rowIndex, destIndex });
+            });
+            cross.addEventListener('dragend', (e) => this.handleDragEnd(e));
+        });
+
+        // Global drag over handler
+        document.addEventListener('dragover', (e) => this.handleDragOver(e));
+        
+        // Global drop handler
+        document.addEventListener('drop', (e) => this.handleDrop(e));
+    }
+
+    handleDragStart(e, sourceType, sourceData) {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', `modulator-${sourceType}`);
+        
+        // Store drag source info
+        this.currentDragSource = { type: sourceType, data: sourceData };
+        
+        // Determine valid zone types
+        this.validZoneTypes = this.dragSourceConfig[sourceType] || [];
+       
+        e.target.classList.add('dragging');
+
+        this.highlightValidDropZones('1px solid rgba(78, 177, 47, 0.8)');
+
+        console.log(`[DraggableModulator] dragstart ** ${sourceType} ${JSON.stringify(sourceData)}, valid zones: ${this.validZoneTypes.join(', ')}`);
+    }
+
+    handleDragEnd(e) {
+        this.cleanup();
+    }
+
+    handleDragOver(e) {
+        if (!e.dataTransfer.types || !e.dataTransfer.types.includes('text/plain')) {
             return;
         }
 
-        // DRAG START - Initialize drag operation
-        cross.addEventListener('dragstart', (e) => {
-            e.dataTransfer.effectAllowed = 'copy';
-            e.dataTransfer.setData('text/plain', 'envelope-modulator');
+        if (!this.currentDragSource) {
+            return;
+        }
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+
+        // Get current mouse position
+        const mouseX = e.clientX;
+        const mouseY = e.clientY;
+
+        // Find drop zone under cursor
+        const targetZone = this.findDropZoneAtPosition(mouseX, mouseY);
+
+        // Update visual feedback - only if zone type is valid
+        if (targetZone !== null && targetZone !== this.currentDragTarget && this.validZoneTypes.includes(targetZone.type)) {
+            this.highlightDropZone(targetZone);
+            this.currentDragTarget = targetZone;
+        }   
+    }
+
+    handleDrop(e) {
+        if (!e.dataTransfer.types || !e.dataTransfer.types.includes('text/plain')) {
+            return;
+        }
+
+        if (!this.currentDragSource) {
+            return;
+        }
+
+        e.preventDefault();
+
+        if (this.currentDragTarget && this.validZoneTypes.includes(this.currentDragTarget.type)) {
+            const sourceType = this.currentDragSource.type;
+            const sourceData = this.currentDragSource.data;
+            const zoneType = this.currentDragTarget.type;
+            const zoneId = this.currentDragTarget.id;
             
-            // Store the current active envelope number
-            this.currentEnvelopeNumber = this.parent.activeEnvIndex;
-           
-            cross.classList.add('dragging');
-
-            this.highlightAllModulableKnobs()
-
-            console.log(`[DraggableModulator] dragstart ** envelope ${this.currentEnvelopeNumber}`);
-        });
-
-        // DRAG OVER - Detect which knob is under cursor
-        document.addEventListener('dragover', (e) => {
-            // First, verify this is our envelope drag by checking dataTransfer types
-            // (we set 'text/plain' data in dragstart)
-            if (!e.dataTransfer.types || !e.dataTransfer.types.includes('text/plain')) {
-                return;
+            // Use the zone's valueResolver to calculate the value to set
+            let resolvedValue;
+            if (zoneType === 'KNOB') {
+                // For knobs, pass the knobId to valueResolver
+                resolvedValue = this.currentDragTarget.valueResolver(this.currentDragTarget.knobId);
+            } else {
+                // For matrix sources/destinations, pass the source data
+                resolvedValue = this.currentDragTarget.valueResolver(sourceData);
             }
+            
+            this.currentDragTarget.element.value = resolvedValue;
+            this.currentDragTarget.element.dispatchEvent(new Event('change', { bubbles: true }));
 
-            if (!this.currentEnvelopeNumber) {
-                return;
+            console.log(`[DraggableModulator] Dropped ${sourceType} on ${zoneType} zone ${zoneId} (value: ${resolvedValue})`);
+
+            // Trigger the callback
+            if (this.onDropCallback) {
+                this.onDropCallback(sourceType, zoneType, zoneId, this.currentDragTarget.element, sourceData, resolvedValue);
             }
+        }
 
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-
-            // Get current mouse position
-            const mouseX = e.clientX;
-            const mouseY = e.clientY;
-
-            // Find knob under cursor
-            const targetKnob = this.findKnobAtPosition(mouseX, mouseY);
-
-            // Update visual feedback
-            if (targetKnob !== null && targetKnob !== this.currentDragTarget) {
-                this.highlightKnob(targetKnob);
-
-                // Store current target for drop event
-                this.currentDragTarget = targetKnob;
-            }   
-        });
-
-        // DROP - Execute the modulation assignment
-        document.addEventListener('drop', (e) => {
-            // Verify this is our envelope drag
-            if (!e.dataTransfer.types || !e.dataTransfer.types.includes('text/plain')) {
-                return;
-            }
-
-            if (!this.currentEnvelopeNumber) {
-                return;
-            }
-
-            e.preventDefault();
-
-            if (this.currentDragTarget) {
-                const envelopeNumber = this.currentEnvelopeNumber;
-                const knobId = this.currentDragTarget.knobId;
-
-                console.log(`[DraggableModulator] Dropped envelope ${envelopeNumber} on knob: ${knobId}`);
-
-                // Trigger the callback
-                if (this.onDropCallback) {
-                    this.onDropCallback(envelopeNumber, knobId);
-                }
-            }
-
-            // Clean up
-            this.cleanup();
-        });
-
-        // DRAG END - Clean up
-        cross.addEventListener('dragend', (e) => {
-            this.cleanup();
-        });
-
-        // Also clean up if drag leaves the window
-/*        document.addEventListener('dragleave', (e) => {
-            // Only cleanup if leaving the document
-            if (!e.relatedTarget) {
-                this.cleanup();
-            }
-        });*/
+        this.cleanup();
     }
 
     /**
-     * Find which knob (if any) is at the given mouse position
+     * Find which drop zone (if any) is at the given mouse position
+     * Only matches zones with valid types for current drag
      * @param {number} mouseX - Client X coordinate
      * @param {number} mouseY - Client Y coordinate
-     * @returns {Object|null} - Knob info object or null
+     * @returns {Object|null} - Drop zone info object or null
      */
-    findKnobAtPosition(mouseX, mouseY) {
-        const hitPadding = 12; // pixels - expand hit area for easier dropping
+    findDropZoneAtPosition(mouseX, mouseY) {
+        const hitPadding = 8; // pixels - expand hit area for easier dropping
 
-        for (let knobInfo of this.knobRegistry) {
-            // Get current position of knob canvas
-            const rect = knobInfo.canvas.getBoundingClientRect();
+        for (let zoneInfo of this.dropZones) {
+            // Only consider zones with valid types
+            if (!this.validZoneTypes.includes(zoneInfo.type)) {
+                continue;
+            }
+            
+            // Get current position of zone element
+            const rect = zoneInfo.element.getBoundingClientRect();
 
             // Check if mouse is within expanded bounds
             if (mouseX >= rect.left - hitPadding &&
                 mouseX <= rect.right + hitPadding &&
                 mouseY >= rect.top - hitPadding &&
                 mouseY <= rect.bottom + hitPadding) {
-                return knobInfo;
+                return zoneInfo;
             }
         }
 
-        return null; // No knob found
+        return null; // No valid drop zone found
     }
 
     /**
-     * Highlight a knob with visual feedback
-     * @param {Object|null} knobInfo - Knob to highlight or null to clear
+     * Highlight drop zones with visual feedback
+     * @param {Object|null} zoneInfo - Drop zone to highlight or null to clear
      */
-    highlightKnob(knobInfo) {
-        // Clear previous highlight
-        this.knobRegistry.forEach(k => {
-            if (k.isHighlighted) {
-//                k.canvas.style.boxShadow = '0 0 12px rgba(102, 126, 234, 0.9), inset 0 0 8px rgba(102, 126, 234, 0.5)';
-                k.canvas.style.filter = 'brightness(1.1)';
-                k.isHighlighted = false;
-            }
-        });
+    highlightDropZone(zoneInfo) {
+        // Reset valid zones to just green border
+        this.highlightValidDropZones('1px solid rgba(78, 177, 47, 0.8)');
 
-        // Apply highlight to new knob
-        if (knobInfo) {
-            // Blue glow effect
- //           knobInfo.canvas.style.boxShadow = '0 0 12px rgba(168, 179, 226, 0.9), inset 0 0 8px rgba(168, 179, 226, 0.5)';
-            knobInfo.canvas.style.filter = 'brightness(1.5)';
-            knobInfo.isHighlighted = true;
+        // Apply hover highlight to new zone
+        if (zoneInfo) {
+            zoneInfo.element.style.backgroundColor = 'rgba(78, 177, 47, 0.2)';
+            zoneInfo.element.style.border = '1px solid rgba(78, 177, 47, 0.9)';
+            zoneInfo.isHighlighted = true;
         }
     }
 
-    highlightAllModulableKnobs() {
-        this.knobRegistry.forEach(k => {
-            k.canvas.style.boxShadow = '0 0 12px rgba(102, 126, 234, 0.9), inset 0 0 8px rgba(102, 126, 234, 0.5)';
-            k.canvas.style.filter = 'brightness(1.1)';
-            k.isHighlighted = false;
+    /**
+     * Highlight only valid drop zones (based on current drag source)
+     */
+    highlightValidDropZones(borderColor) {
+        this.dropZones.forEach(z => {
+            if (this.validZoneTypes.includes(z.type)) {
+                z.element.style.border = borderColor || '';
+                z.element.style.backgroundColor = '';
+            } else {
+                // Clear invalid zones
+                z.element.style.border = '';
+                z.element.style.backgroundColor = '';
+            }
+            z.isHighlighted = false;
+        });
+    }
+
+    /**
+     * Clear all highlights
+     */
+    clearAllHighlights() {
+        this.dropZones.forEach(z => {
+            z.element.style.border = '';
+            z.element.style.backgroundColor = '';
+            z.isHighlighted = false;
         });
     }
 
@@ -208,19 +288,21 @@ export class DraggableModulator {
      * Clean up drag state
      */
     cleanup() {
-        this.knobRegistry.forEach(k => {
-            k.canvas.style.boxShadow = 'none';
-            k.canvas.style.filter = 'brightness(1)';
-            k.isHighlighted = false;
-        });
-
+        this.clearAllHighlights();
 
         const cross = this.parent.querySelector('.envelope-cross');
         if (cross) {
             cross.classList.remove('dragging');
         }
-        this.highlightKnob(null);
+        
+        const destCrosses = this.parent.querySelectorAll('.destination-cross');
+        destCrosses.forEach(cross => {
+            cross.classList.remove('dragging');
+        });
+
+        this.highlightDropZone(null);
         this.currentDragTarget = null;
-        this.currentEnvelopeNumber = null;
+        this.currentDragSource = null;
+        this.validZoneTypes = [];
     }
 }

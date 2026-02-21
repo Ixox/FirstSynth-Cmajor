@@ -10,12 +10,6 @@ let currentParameterValues = new Map();
 let programNumber = 0;
 let recording = 0;
 
-// Track active note's base transpose for pitch wheel modulation
-let activeNoteTranspose = {
-    osc1: 0,
-    osc2: 0,
-    osc3: 0
-};
 
 let isSessionConnected = false;
 
@@ -115,37 +109,6 @@ export default function runWorker (pc)
                 const programNum = midi.getProgramChangeNumber(event.message);
                 const programIndex = lastBank * 128 + programNum;
                 patchConnection.sendStoredStateValue("currentProgram", presets.PresetBank.getIDOfIndex(programIndex));
-            }
-
-            // Handle pitch wheel (pitch bend)
-            if (midi.isPitchWheel && midi.isPitchWheel(event.message)) {
-                try {
-                    // Extract pitch bend value from raw MIDI message
-                    const lsb = (event.message >> 8) & 0x7F;
-                    const msb = (event.message >> 16) & 0x7F;
-                    const pitchBendRaw = (msb << 7) | lsb;
-                    
-                    // Normalize to -1.0 to +1.0 (center is 8192)
-                    const normalized = (pitchBendRaw - 8192) / 8192;
-                    
-                    // Map to ±0.5 semitones
-                    const pitchModulation = normalized * 0.5;
-
-                    console.log(`Pitch wheel: raw=${pitchBendRaw}, mod=${pitchModulation.toFixed(3)} semitones`);
-                    
-                    // Get current transpose values from currentParameterValues
-                    const osc1Base = currentParameterValues.get('osc1Transpose') || 0;
-                    const osc2Base = currentParameterValues.get('osc2Transpose') || 0;
-                    const osc3Base = currentParameterValues.get('osc3Transpose') || 0;
-
-                    // Send absolute transpose values (base + pitch wheel offset)
-                    patchConnection.sendEventOrValue('osc1Transpose', osc1Base + pitchModulation);
-                    patchConnection.sendEventOrValue('osc2Transpose', osc2Base + pitchModulation);
-                    patchConnection.sendEventOrValue('osc3Transpose', osc3Base + pitchModulation);
-                    
-                } catch (pbError) {
-                    console.error("Pitch bend error:", pbError);
-                }
             }
         } catch (error) {
             console.error("Error in MIDI handler:", error, error.stack);

@@ -1,6 +1,5 @@
 import { RotaryKnob } from './gui/RotaryKnob.js';
 import { WaveShapeKnob } from './gui/WaveShapeKnob.js';
-import { OscMorphSlider } from './gui/OscMorphSlider.js';
 import { Envelope } from './gui/Envelope.js';
 import { LFO } from './gui/LFO.js';
 import { DraggableModulator } from './gui/DraggableModulator.js';
@@ -26,9 +25,9 @@ const MtxDestination = {
     1: 'OSC1 Wave',
     2: 'OSC2 Wave',
     3: 'OSC3 Wave',
-    4: 'OSC1 Pitch',
-    5: 'OSC2 Pitch',
-    6: 'OSC3 Pitch',
+    4: 'OSC1 Transpose',
+    5: 'OSC2 Transpose',
+    6: 'OSC3 Transpose',
     7: 'OSC1 Pan',
     8: 'OSC2 Pan',
     9: 'OSC3 Pan',
@@ -49,6 +48,28 @@ const filterTypeNames = {
     2: 'Band Pass',
     3: 'High Pass'
 };
+
+// Map knob IDs to their MtxDestination values
+const knobToMtxDestination = {
+    'osc1WaveshapeIn': 1,
+    'osc2WaveshapeIn': 2,
+    'osc3WaveshapeIn': 3,
+    'osc1Transpose': 4,
+    'osc1Pan': 7,
+    'osc1Gain': 10,
+    'osc2Transpose': 5,
+    'osc2Pan': 8,
+    'osc2Gain': 11,
+    'osc3Transpose': 6,
+    'osc3Pan': 9,
+    'osc3Gain': 12,
+    'filterCutoff': 13,
+    'filterResonance': 14
+};
+
+function getMtxDestinationFromKnobId(knobId) {
+    return knobToMtxDestination[knobId] || 0;
+}
 
 const lfoWaveShapeNames = {
     0: 'Sine',
@@ -242,13 +263,39 @@ class test_View extends HTMLElement
         // Matrix updates are now handled through individual mtxRowN events
         // (mtxRowNSource, mtxRowNMultiplier, mtxRowNDest1, mtxRowNDest2)
 
-        // Initialize Draggable Modulator (envelope cross drag-drop)
-        this.draggableModulator = new DraggableModulator(this, (envNumber, knobId) => {
-            this.onEnvelopeDroppedOnKnob(envNumber, knobId);
-        });
-
-        // Initialize Matrix Modulation UI
+        // Initialize Matrix Modulation UI first (creates the drop zone elements)
         this.initMatrixRows();
+
+        // Configure drop zones for draggable modulator
+        const dropZoneConfig = {
+            MATRIX_SOURCE: {
+                selector: '.matrix-row',
+                selectIndex: 0,  // First .matrix-select in each row
+                valueResolver: (envNumber) => 3 + envNumber  // ENV 1=4, ENV 2=5, ENV 3=6
+            },
+            MATRIX_DESTINATION: {
+                selector: '.matrix-row',
+                selectIndex: 1,  // Second .matrix-select in each row (Dest1)
+                valueResolver: (envNumber) => envNumber
+            },
+            KNOB: {
+                type: 'canvas',
+                selector: '.control-canvas',
+                valueResolver: (knobId) => getMtxDestinationFromKnobId(knobId),
+                filter: (knobId) => knobToMtxDestination.hasOwnProperty(knobId)  // Only include knobs with valid destination mappings
+            }
+        };
+
+        // Configure which drag sources can target which zone types
+        const dragSourceConfig = {
+            'envelope': ['MATRIX_SOURCE'],  // Envelopes can only be dragged to MATRIX_SOURCE zones
+            'destination': ['KNOB']  // Destinations can only be dragged to KNOB zones
+        };
+
+        // Initialize Draggable Modulator (envelope and destination drag-drop)
+        this.draggableModulator = new DraggableModulator(this, dropZoneConfig, dragSourceConfig, (sourceType, zoneType, zoneId, element, sourceData, resolvedValue) => {
+            this.onSourceDropped(sourceType, zoneType, zoneId, element, sourceData, resolvedValue);
+        });
 
         // Initial UI Sync
         this.refreshEnvelope();
@@ -258,18 +305,12 @@ class test_View extends HTMLElement
     initEnvelopeSelector()
     {
         const buttons = this.querySelectorAll('.envelope-selector .selector-btn');
-        const cross = this.querySelector('.envelope-cross');
         
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
                 buttons.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this.activeEnvIndex = parseInt(btn.dataset.env);
-                
-                // Update the cross to show the current envelope number
-                if (cross) {
-                    cross.textContent = this.activeEnvIndex;
-                }
                 
                 this.refreshEnvelope();
             });
@@ -290,6 +331,53 @@ class test_View extends HTMLElement
             const value = this.envParamsState[paramId];
             this.updateEnvelopeKnob(paramId, value);
         });
+    }
+
+    createDestinationCross(rowIndex, destIndex)
+    {
+        const cross = document.createElement('div');
+        cross.className = 'destination-cross';
+        cross.draggable = true;
+        cross.dataset.rowIndex = rowIndex;
+        cross.dataset.destIndex = destIndex;
+        cross.title = `Drag to set matrix destination`;
+        
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('width', '100%');
+        svg.setAttribute('height', '100%');
+        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        
+        const vertLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        vertLine.setAttribute('x1', '12');
+        vertLine.setAttribute('y1', '2');
+        vertLine.setAttribute('x2', '12');
+        vertLine.setAttribute('y2', '22');
+        vertLine.setAttribute('stroke', 'currentColor');
+        vertLine.setAttribute('stroke-width', '1.5');
+        vertLine.setAttribute('stroke-linecap', 'round');
+        
+        const horzLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        horzLine.setAttribute('x1', '2');
+        horzLine.setAttribute('y1', '12');
+        horzLine.setAttribute('x2', '22');
+        horzLine.setAttribute('y2', '12');
+        horzLine.setAttribute('stroke', 'currentColor');
+        horzLine.setAttribute('stroke-width', '1.5');
+        horzLine.setAttribute('stroke-linecap', 'round');
+        
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', '12');
+        circle.setAttribute('cy', '12');
+        circle.setAttribute('r', '2');
+        circle.setAttribute('fill', 'currentColor');
+        
+        svg.appendChild(vertLine);
+        svg.appendChild(horzLine);
+        svg.appendChild(circle);
+        
+        cross.appendChild(svg);
+        return cross;
     }
 
     // Initialization for the 3 buttons to select active LFO
@@ -610,6 +698,13 @@ class test_View extends HTMLElement
                 dest1Select.appendChild(option);
             });
             
+            // Dest1 cross for drag-drop
+            const dest1Cross = this.createDestinationCross(i, 1);
+            const dest1Container = document.createElement('div');
+            dest1Container.className = 'matrix-dest-container';
+            dest1Container.appendChild(dest1Select);
+            dest1Container.appendChild(dest1Cross);
+            
             // Dest2 dropdown
             const dest2Select = document.createElement('select');
             dest2Select.className = 'matrix-select';
@@ -621,12 +716,19 @@ class test_View extends HTMLElement
                 dest2Select.appendChild(option);
             });
             
+            // Dest2 cross for drag-drop
+            const dest2Cross = this.createDestinationCross(i, 2);
+            const dest2Container = document.createElement('div');
+            dest2Container.className = 'matrix-dest-container';
+            dest2Container.appendChild(dest2Select);
+            dest2Container.appendChild(dest2Cross);
+            
             // Append all elements to row
             rowEl.appendChild(rowDiv);
             rowEl.appendChild(sourceSelect);
             rowEl.appendChild(multiplierCanvas);
-            rowEl.appendChild(dest1Select);
-            rowEl.appendChild(dest2Select);
+            rowEl.appendChild(dest1Container);
+            rowEl.appendChild(dest2Container);
             
             targetGrid.appendChild(rowEl);
             
@@ -757,19 +859,34 @@ class test_View extends HTMLElement
     }
 
     /**
-     * Callback handler when envelope is dropped on a knob
-     * @param {number} envelopeNumber - The envelope number (1, 2, or 3)
-     * @param {string} knobId - The knob ID (e.g., "osc1Transpose")
+     * Callback handler when sources are dropped on zones
+     * @param {string} sourceType - Type of source ('envelope' or 'destination')
+     * @param {string} zoneType - Type of zone being dropped on ('MATRIX_SOURCE', 'KNOB', etc.)
+     * @param {number|string} zoneId - ID of the zone
+     * @param {Element} element - The target element
+     * @param {*} sourceData - Source-specific data (e.g., { rowIndex, destIndex } for destinations)
+     * @param {number} resolvedValue - The computed value to apply
      */
-    onEnvelopeDroppedOnKnob(envelopeNumber, knobId) {
-        console.log(`[Envelope Modulation] Envelope ${envelopeNumber} assigned to knob: ${knobId}`);
-        
-        // TODO: Implement your modulation logic here
-        // Example: You could send a message to your Cmajor patch:
-        // this.patchConnection.sendEventOrValue(`env${envelopeNumber}AssignTo`, knobId);
-        
-        // Or update your UI to show the assignment
-        // this.showModulationAssignment(envelopeNumber, knobId);
+    onSourceDropped(sourceType, zoneType, zoneId, element, sourceData, resolvedValue) {
+        if (sourceType === 'envelope') {
+            console.log(`[DraggableModulator] Envelope dropped on ${zoneType} zone ${zoneId}`);
+            // The zone's valueResolver and element value update are handled by DraggableModulator
+            // The change event will trigger any necessary handlers
+        } else if (sourceType === 'destination') {
+            // Update the matrix destination select for the row this cross belongs to
+            console.log(`[DraggableModulator] Destination dropped on ${zoneType} zone ${zoneId}, value=${resolvedValue}`);
+            if (zoneType === 'KNOB' && sourceData) {
+                const { rowIndex, destIndex } = sourceData;
+                const rowNum = rowIndex + 1;
+                const selectId = destIndex === 1 ? `mtx-dest1-${rowIndex}` : `mtx-dest2-${rowIndex}`;
+                const destSelect = this.querySelector(`#${selectId}`);
+                if (destSelect) {
+                    destSelect.value = resolvedValue;
+                    destSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    this.onMatrixRowChange(rowIndex, destIndex === 1 ? 'dest1' : 'dest2', resolvedValue);
+                }
+            }
+        }
     }
 
     getHTML()

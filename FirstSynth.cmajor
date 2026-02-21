@@ -950,6 +950,7 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
         value float32 pitchModulationIn;
         value float32 panModulationIn;
         value float32 gainModulationIn;
+        value float32 pitchBendIn;
     }
 
     output {
@@ -962,9 +963,10 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
 
     node {
         saturator = Saturator;
-        smoothedWaveShape = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
+        smoothedWaveShape = std::smoothing::SmoothedValueStream(0.02f, 0.0f);
         smoothedPan = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
         smoothedGain = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
+        smoothedPitchBend = std::smoothing::SmoothedValueStream(0.02f, 0.0f);
     }
 
     float32 phase;
@@ -980,6 +982,7 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
     float32 smoothedWaveShapeValue = 0.0f;
     float32 smoothedPanValue = 0.0f;
     float32 smoothedGainValue = 0.0f;
+    float32 smoothedPitchBendValue = 0.0f;
 
     void init() {
         phase = 0.0f;
@@ -1035,23 +1038,26 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
             smoothedWaveShape.in <- waveShapeModulationIn;
             smoothedPan.in <- panModulationIn;
             smoothedGain.in <- gainModulationIn;
+            smoothedPitchBend.in <- pitchBendIn;
             
             // Read smoothed modulation values from processors
             smoothedWaveShapeValue = smoothedWaveShape.out;
             smoothedPanValue = smoothedPan.out;
             smoothedGainValue = smoothedGain.out;
+            smoothedPitchBendValue = smoothedPitchBend.out;
             
             // Advance smoothing processors
             smoothedWaveShape.advance();
             smoothedPan.advance();
             smoothedGain.advance();
+            smoothedPitchBend.advance();
             
             // Interpolate between waveforms based on currentWaveShape (0-99)
             // 0=sine, 25=square, 50=sawtooth, 75=triangle
             float32 sample;
             int32 waveValue = getWaveShape();
 
-            float32 modulatedFrequency = baseFrequency * pow(2.0f, pitchModulationIn / 12.0f);
+            float32 modulatedFrequency = baseFrequency * pow(2.0f, pitchModulationIn / 12.0f + smoothedPitchBendValue);
 
             if (modulatedFrequency != lastFrequency) {
                 updatePhaseIncrement(modulatedFrequency);
@@ -1174,7 +1180,7 @@ processor MyLfo(float32 initialShape = 0, float32 initialRate = 3.0f, float32 in
 processor Voice
 {
     input {
-        event (std::notes::NoteOn, std::notes::NoteOff) eventIn;
+        event (std::notes::NoteOn, std::notes::NoteOff, std::notes::PitchBend) eventIn;
         event Instrument::Params paramsIn;
         event Instrument::OscParams oscParamsIn;
         event Instrument::LfoParams lfoParamsIn;
@@ -1254,6 +1260,16 @@ processor Voice
         }
     }
 
+    event eventIn (std::notes::PitchBend e)
+    {
+        // Handle pitch bend event
+        float32 pitchBendValue = e.bendSemitones / 512.0f;
+        
+        // Apply pitch bend to oscillators
+        for (wrap<3> i) {
+            oscillator[i].pitchBendIn <- pitchBendValue;
+        }
+    }
 
     event paramsIn (Instrument::Params paramsIn) {
         params = paramsIn;

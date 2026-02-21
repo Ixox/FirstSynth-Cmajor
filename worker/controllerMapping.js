@@ -62,35 +62,6 @@ export class ControllerMappings {
     }
 
     /**
-     * Apply pitch wheel modulation (±0.5 semitones)
-     * MIDI pitch bend is 14-bit (0-16383), where 8192 is center
-     * Pass baseTranspose values to apply correct modulation
-     */
-    applyPitchWheel(patchConnection, pitchBendValue, baseTransposeValues = {}) {
-        // Normalize to -1.0 to +1.0 (center is 8192)
-        const normalized = (pitchBendValue - 8192) / 8192;
-
-        // Map to ±0.5 semitones
-        const pitchModulation = normalized * 0.5;
-
-        console.log(`Pitch wheel: raw=${pitchBendValue}, normalized=${normalized.toFixed(3)}, mod=${pitchModulation.toFixed(3)} semitones`);
-
-        // Send absolute transpose values (base + pitch wheel offset)
-        if (baseTransposeValues.osc1 !== undefined) {
-            const osc1Value = baseTransposeValues.osc1 + pitchModulation;
-            patchConnection.sendEventOrValue('osc1Transpose', osc1Value);
-        }
-        if (baseTransposeValues.osc2 !== undefined) {
-            const osc2Value = baseTransposeValues.osc2 + pitchModulation;
-            patchConnection.sendEventOrValue('osc2Transpose', osc2Value);
-        }
-        if (baseTransposeValues.osc3 !== undefined) {
-            const osc3Value = baseTransposeValues.osc3 + pitchModulation;
-            patchConnection.sendEventOrValue('osc3Transpose', osc3Value);
-        }
-    }
-
-    /**
      * Map MIDI CC value (0-127) to parameter-specific range
      */
     mapControllerValueToParameter(paramName, midiValue) {

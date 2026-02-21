@@ -375,6 +375,53 @@ select option {
     border: 1px solid rgba(78, 177, 47, 0.6);
 }
 
+/* Destination cross for matrix drag-drop */
+.destination-cross {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #9eb3db;
+    cursor: grab;
+    user-select: none;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+    border-radius: 3px;
+    padding: 2px 3px;
+    margin-left: 4px;
+}
+
+.destination-cross svg {
+    width: 100%;
+    height: 100%;
+    color: inherit;
+}
+
+.destination-cross:hover {
+    opacity: 1.0;
+    color: #c5d3e8;
+    border: 1px solid rgba(78, 177, 47, 0.6);
+}
+
+.destination-cross:active {
+    cursor: grabbing;
+}
+
+.destination-cross.dragging {
+    opacity: 1.0;
+    color: #e0e8f5;
+    border: 1px solid rgba(78, 177, 47, 0.6);
+}
+
+/* Container for destination select and cross */
+.matrix-dest-container {
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
 /* Buttons */
 .control-button {
     background:transparent;
