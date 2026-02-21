@@ -4,6 +4,7 @@ import { Envelope } from './gui/Envelope.js';
 import { LFO } from './gui/LFO.js';
 import { DraggableModulator } from './gui/DraggableModulator.js';
 import { Filter } from './gui/Filter.js';
+import { SynthWheel } from './gui/SynthWheel.js';
 import { PresetBank } from './gui/presets/presetBank.js';
 
 // Matrix Modulation Enums
@@ -17,7 +18,9 @@ const MtxSource = {
     5: 'ENV 2',
     6: 'ENV 3',
     7: 'Keytrack',
-    8: 'Velocity'
+    8: 'Velocity',
+    9: 'Aftertouch',
+    10: 'Mod Wheel'
 };
 
 const MtxDestination = {    
@@ -173,6 +176,9 @@ class test_View extends HTMLElement
         // Initialize Filter Visualization
         this.filter = new Filter('filter-visualization-canvas', this);
 
+        // Initialize Synth Wheels
+        this.initSynthWheels();
+
         // Initialize Preset Selector
         this.presetBank = new PresetBank();
         const presetSelect = this.querySelector('#preset-list');
@@ -271,7 +277,15 @@ class test_View extends HTMLElement
             MATRIX_SOURCE: {
                 selector: '.matrix-row',
                 selectIndex: 0,  // First .matrix-select in each row
-                valueResolver: (envNumber) => 3 + envNumber  // ENV 1=4, ENV 2=5, ENV 3=6
+                // Envelope=4-6, LFO=1-3
+                valueResolver: (sourceNumber, sourceType) => {
+                    if (sourceType === 'envelope') {
+                        return 3 + sourceNumber;  // ENV 1=4, ENV 2=5, ENV 3=6
+                    } else if (sourceType === 'lfo') {
+                        return sourceNumber;  // LFO 1=1, LFO 2=2, LFO 3=3
+                    }
+                    return 0;
+                }
             },
             MATRIX_DESTINATION: {
                 selector: '.matrix-row',
@@ -289,6 +303,7 @@ class test_View extends HTMLElement
         // Configure which drag sources can target which zone types
         const dragSourceConfig = {
             'envelope': ['MATRIX_SOURCE'],  // Envelopes can only be dragged to MATRIX_SOURCE zones
+            'lfo': ['MATRIX_SOURCE'],  // LFOs can only be dragged to MATRIX_SOURCE zones
             'destination': ['KNOB']  // Destinations can only be dragged to KNOB zones
         };
 
@@ -535,7 +550,6 @@ class test_View extends HTMLElement
         const waveShapeKnob = new WaveShapeKnob(paramId, this, callback, {knobColor: color});
     
         this.listeners[paramId] = value => {
-            console.log(`Updating waveshape knob for ${paramId} with value ${value}`);
             waveShapeKnob.currentWaveshape = value;
             waveShapeKnob.drawWaveshapeKnob(value);
         };
@@ -647,6 +661,56 @@ class test_View extends HTMLElement
         
         this.patchConnection.addParameterListener('filterType', this.listeners.filterType);
         this.patchConnection.requestParameterValue('filterType');
+    }
+
+    initSynthWheels()
+    {
+        // Initialize Pitch Bend Wheel
+        const pitchBendCanvas = this.querySelector('#pitchBendWheel');
+        if (pitchBendCanvas) {
+            this.pitchBendWheel = new SynthWheel(pitchBendCanvas, {
+                label: 'Pitch Bend',
+                bipolar: true,
+                initialValue: 0
+            });
+        }
+
+        // Initialize Mod Wheel
+        const modWheelCanvas = this.querySelector('#modWheelWheel');
+        if (modWheelCanvas) {
+            this.modWheelWheel = new SynthWheel(modWheelCanvas, {
+                label: 'Mod Wheel',
+                bipolar: false,
+                initialValue: 0
+            });
+        }
+
+        // Set up listener for stored state values from worker
+        this.setupStoredStateListeners();
+    }
+
+    setupStoredStateListeners()
+    {
+        // Listen to pitch bend and mod wheel value changes from the worker
+        this.patchConnection.addStoredStateValueListener((event) => {
+            if (event.key === 'pitchBendValue' && this.pitchBendWheel) {
+                this.pitchBendWheel.setValue(event.value);
+            } else if (event.key === 'modWheelValue' && this.modWheelWheel) {
+                this.modWheelWheel.setValue(event.value);
+            } else if (event.key === 'currentNote') {
+                this.updateCurrentNoteDisplay(event.value);
+            }
+        });
+    }
+
+    updateCurrentNoteDisplay(noteName)
+    {
+        if (!this.noteDisplay) {
+            this.noteDisplay = this.querySelector('#currentNoteDisplay');
+        }
+        if (this.noteDisplay) {
+            this.noteDisplay.textContent = noteName || '—';
+        }
     }
 
     initMatrixRows()
@@ -860,7 +924,7 @@ class test_View extends HTMLElement
 
     /**
      * Callback handler when sources are dropped on zones
-     * @param {string} sourceType - Type of source ('envelope' or 'destination')
+     * @param {string} sourceType - Type of source ('envelope', 'lfo', or 'destination')
      * @param {string} zoneType - Type of zone being dropped on ('MATRIX_SOURCE', 'KNOB', etc.)
      * @param {number|string} zoneId - ID of the zone
      * @param {Element} element - The target element
@@ -869,12 +933,13 @@ class test_View extends HTMLElement
      */
     onSourceDropped(sourceType, zoneType, zoneId, element, sourceData, resolvedValue) {
         if (sourceType === 'envelope') {
-            console.log(`[DraggableModulator] Envelope dropped on ${zoneType} zone ${zoneId}`);
+            // The zone's valueResolver and element value update are handled by DraggableModulator
+            // The change event will trigger any necessary handlers
+        } else if (sourceType === 'lfo') {
             // The zone's valueResolver and element value update are handled by DraggableModulator
             // The change event will trigger any necessary handlers
         } else if (sourceType === 'destination') {
             // Update the matrix destination select for the row this cross belongs to
-            console.log(`[DraggableModulator] Destination dropped on ${zoneType} zone ${zoneId}, value=${resolvedValue}`);
             if (zoneType === 'KNOB' && sourceData) {
                 const { rowIndex, destIndex } = sourceData;
                 const rowNum = rowIndex + 1;

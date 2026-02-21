@@ -8,18 +8,17 @@ export class ControllerMappings {
         
         // Default MIDI CC mappings (CC number -> parameter name)
         this.defaultMappings = {
-            1: 'filterCutoff',           // Modulation wheel -> Filter Cutoff
-            7: 'mainGain',               // Volume (CC 7)
-            10: 'stereoSpread',          // Pan (CC 10)
-            11: 'chorusAmount',          // Expression pedal
-            64: 'osc2Sync',              // Sustain pedal -> OSC2 Sync toggle
-            70: 'filterResonance',       // CC 70
-            71: 'osc1Gain',              // CC 71
-            72: 'osc2Gain',              // CC 72
-            73: 'osc3Gain',              // CC 73
-            74: 'lfo1Rate',              // CC 74
-            75: 'lfo2Rate',              // CC 75
-            76: 'lfo3Rate',              // CC 76
+            7: { parameter: 'mainGain', mapping: v => Math.round((v / 127) * 141) }, // CC7: Main Gain (0-141 dB)
+            10: { parameter: 'stereoSpread', mapping: v => Math.round((v / 127) * 100) },
+            11: { parameter: 'chorusAmount', mapping: v => Math.round((v / 127) * 100) },
+            21: { parameter: 'filterCutoff', mapping: v => 20 * Math.pow(1000, v / 127) },          
+            22: { parameter: 'filterResonance', mapping: v => 20 + (v / 127) * 980 },       
+            23: { parameter: 'lfo1Rate', mapping: v => Math.round(10 + (v / 127) * 590) },              
+            24: { parameter: 'lfo2Rate', mapping: v => Math.round(10 + (v / 127) * 590) },              
+            25: { parameter: 'lfo3Rate', mapping: v => Math.round(10 + (v / 127) * 590) },
+            26: { parameter: 'mtxRow1Multiplier', mapping: v => -10 + (v / 127) * 20 },
+            27: { parameter: 'mtxRow2Multiplier', mapping: v => -10 + (v / 127) * 20 },
+            28: { parameter: 'mtxRow3Multiplier', mapping: v => -10 + (v / 127) * 20 }
         };
 
         // Track active parameters to avoid redundant sends
@@ -37,17 +36,23 @@ export class ControllerMappings {
 
     /**
      * Apply a MIDI controller value to the patch
+     * @param {Object} patchConnection - Connection to patch
+     * @param {number} controllerNumber - MIDI CC number
+     * @param {number} controllerValue - MIDI CC value (0-127)
      */
     applyController(patchConnection, controllerNumber, controllerValue) {
-        const paramName = this.defaultMappings[controllerNumber];
+
+        const mapping = this.defaultMappings[controllerNumber];
         
-        if (!paramName) {
+        if (!mapping) {
             // Unmapped controller
             return;
         }
 
-        // Skip redundant sends
         const key = `${controllerNumber}`;
+        const paramName = mapping.parameter;
+
+        // Skip redundant sends
         if (this.activeControllers.get(key) === controllerValue) {
             return;
         }
@@ -55,58 +60,10 @@ export class ControllerMappings {
         this.activeControllers.set(key, controllerValue);
 
         // Convert MIDI value (0-127) to appropriate range for parameter
-        const mappedValue = this.mapControllerValueToParameter(paramName, controllerValue);
+        const mappedValue = mapping.mapping(controllerValue);
         
         // Send to patch
         patchConnection.sendEventOrValue(paramName, mappedValue);
-    }
-
-    /**
-     * Map MIDI CC value (0-127) to parameter-specific range
-     */
-    mapControllerValueToParameter(paramName, midiValue) {
-        // Normalize MIDI value to 0-1 range
-        const normalized = midiValue / 127;
-
-        // Parameter-specific mappings
-        switch (paramName) {
-            case 'filterCutoff':
-                // Map to 20-20000 Hz logarithmically
-                return 20 * Math.pow(1000, normalized);
-            
-            case 'filterResonance':
-                // Map to 20-1000
-                return 20 + normalized * 980;
-            
-            case 'mainGain':
-            case 'osc1Gain':
-            case 'osc2Gain':
-            case 'osc3Gain':
-                // Map to 0-141 dB range
-                return Math.round(normalized * 141);
-            
-            case 'lfo1Rate':
-            case 'lfo2Rate':
-            case 'lfo3Rate':
-                // Map to 10-600 Hz
-                return Math.round(10 + normalized * 590);
-            
-            case 'stereoSpread':
-                // Map to 0-100%
-                return Math.round(normalized * 100);
-            
-            case 'chorusAmount':
-                // Map to 0-100%
-                return Math.round(normalized * 100);
-            
-            case 'osc2Sync':
-                // Toggle: 0 or 1
-                return midiValue >= 64 ? 1 : 0;
-            
-            default:
-                // Default: scale to 0-100
-                return Math.round(normalized * 100);
-        }
     }
 
     /**
@@ -120,7 +77,7 @@ export class ControllerMappings {
      * Set custom mapping
      */
     setMapping(controllerNumber, parameterName) {
-        this.defaultMappings[controllerNumber] = parameterName;
+        this.defaultMappings[controllerNumber] = { parameter: parameterName, mapping: v => v };
     }
 
     /**

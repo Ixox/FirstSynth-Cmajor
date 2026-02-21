@@ -90,10 +90,8 @@
 /* Generic select styling */
 select {
     appearance: none;
-    min-width: 100px;
-    width: auto;
+    max-width: 96px;
     padding: 2px 4px;
-    padding-right: 24px;
     background: rgb(43, 73, 99);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 6px;
@@ -179,12 +177,14 @@ select option {
 .matrix-columns-wrapper {
     display: flex;
     gap: 5px;
-    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
 }
 
 .matrix-column-left,
 .matrix-column-right {
     flex: 1;
+    max-width: 100%;
     overflow-x: auto;
 }
 
@@ -334,6 +334,12 @@ select option {
     margin-bottom: 2px;
 }
 
+.lfo-canvas-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: 2px;
+}
+
 /* Draggable cross for envelope modulation assignment */
 .envelope-cross {
     position: absolute;
@@ -370,6 +376,47 @@ select option {
 }
 
 .envelope-cross.dragging {
+    opacity: 1.0;
+    color: #e0e8f5;
+    border: 1px solid rgba(78, 177, 47, 0.6);
+}
+
+/* LFO cross for matrix source drag-drop */
+.lfo-cross {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9eb3db;
+    cursor: grab;
+    user-select: none;
+    opacity: 0.8;
+    transition: all 0.2s ease;
+    border-radius: 3px;
+    padding: 2px 4px;
+}
+
+.lfo-cross svg {
+    width: 100%;
+    height: 100%;
+    color: inherit;
+}
+
+.lfo-cross:hover {
+    opacity: 1.0;
+    color: #c5d3e8;
+    border: 1px solid rgba(78, 177, 47, 0.6);
+}
+
+.lfo-cross:active {
+    cursor: grabbing;
+}
+
+.lfo-cross.dragging {
     opacity: 1.0;
     color: #e0e8f5;
     border: 1px solid rgba(78, 177, 47, 0.6);
@@ -626,6 +673,15 @@ select option {
 
 .matrix-module {
     flex: 0 0 100%;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.matrix-content {
+    overflow-x: auto;
+    max-width: 100%;
+}
 }
 
 .matrix-content {
@@ -635,8 +691,8 @@ select option {
 
 .matrix-grid {
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr 2fr 2fr;
-    gap: 6px;
+    grid-template-columns: 0.5fr 2fr .8fr 2fr 2fr;
+    gap: 0px;
     min-width: max-content;
     align-items: center;
 }
@@ -645,8 +701,7 @@ select option {
     font-size: 10px;
     font-weight: 700;
     color: #9eb3db;
-    text-align: center;
-    padding: 4px;
+    padding-bottom: 4px;
     border-bottom: 1px solid rgba(158, 190, 219, 0.3);
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -654,6 +709,7 @@ select option {
 
 .modules-row .matrix-row {
     display: contents;
+    grid-template-columns: 1fr 2fr 1fr 2fr 2fr;
 }
 
 .matrix-row-num {
@@ -661,14 +717,46 @@ select option {
     font-size: 10px;
     font-weight: 600;
     color: #b0b0b0;
-    padding: 4px;
 }
 
 .matrix-multiplier-canvas {
-    width: 40px;
-    height: 40px;
+    width: 36px;
+    height: 36px;
     cursor: pointer;
 }
+
+/* Synth Wheel Styles - Vertical Slider */
+.synth-wheel-container {
+    display: grid;
+    grid-template-columns: auto auto auto;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 4px;
+    min-height: 140px;
+    width: 100%;
+}
+
+.synth-wheel {
+    width: 20px;
+    height: 140px;
+    cursor: pointer;
+    border-radius: 4px;
+}
+
+.midi-note-display {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 4px;
+    min-height: 140px;
+    width: 60px;
+    font-size: 24px;
+    font-weight: 700;
+    color: #9eb3db;
+    letter-spacing: 1px;
+}
+
 
 /* Responsive adjustments 
 @media (max-width: 700px) {

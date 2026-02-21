@@ -38,7 +38,7 @@ const stateValueChangeListener = event =>
             // Load the preset into the patch
             if (oldProgramNumber != programNumber)
                 presetBank.sendParametersToPatchConnection(patchConnection, programNumber);
-
+           
             patchConnection.sendStoredStateValue("presetName", preset.name);
         }
     }
@@ -81,27 +81,50 @@ const parameterListener = event =>
     currentParameterValues.set(event.endpointID, event.value);
 }
 
+// Helper function to convert MIDI note number to note name
+function getMidiNoteName(noteNumber) {
+    const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const octave = Math.floor(noteNumber / 12) - 1;
+    const noteInOctave = noteNumber % 12;
+    return noteNames[noteInOctave] + octave;
+}
+
 export default function runWorker (pc)
 {
     patchConnection = pc;
 
-    const midi = patchConnection.utilities.midi;
+    console.log('Worker: runWorker() initialized');
 
-    // Debug: Log MIDI object to see what's available
-    console.log("MIDI object:", midi);
+    const midi = patchConnection.utilities.midi;
 
     const midiInListener = event =>
     {
         try {
             if (midi.isController(event.message))
-            {
+            {                
                 const ccNum = midi.getControllerNumber(event.message);
                 const ccVal = midi.getControllerValue(event.message);
                 
                 if (ccNum == 0) // bank select
                     lastBank = ccVal;
+                else if (ccNum == 1) { // mod wheel - send to stored state for UI
+                    const normalizedValue = ccVal / 127.0;
+                    patchConnection.sendStoredStateValue("modWheelValue", normalizedValue);
+                }
+                else
+                    controllerMappings.applyController(patchConnection, ccNum, ccVal)
+            }
 
-                controllerMappings.applyController(patchConnection, ccNum, ccVal)
+            if (midi.isNoteOn(event.message))
+            {
+                const noteNumber = midi.getNoteNumber(event.message);
+                const noteName = getMidiNoteName(noteNumber);
+                patchConnection.sendStoredStateValue("currentNote", noteName);
+            }
+
+            if (midi.isNoteOff(event.message))
+            {
+                patchConnection.sendStoredStateValue("currentNote", "");
             }
 
             if (midi.isProgramChange(event.message))
@@ -110,8 +133,16 @@ export default function runWorker (pc)
                 const programIndex = lastBank * 128 + programNum;
                 patchConnection.sendStoredStateValue("currentProgram", presets.PresetBank.getIDOfIndex(programIndex));
             }
+
+            if (midi.isPitchWheel(event.message))
+            {
+                const bendValue = midi.getPitchWheelValue(event.message);
+                // bendValue is 0-16384, center is 8192. Convert to -1 to 1 range
+                const normalizedValue = (bendValue - 8192) / 8192.0;
+                patchConnection.sendStoredStateValue("pitchBendValue", normalizedValue);
+            }
         } catch (error) {
-            console.error("Error in MIDI handler:", error, error.stack);
+            console.error("Error in MIDI handler:", error);
         }
     };
 

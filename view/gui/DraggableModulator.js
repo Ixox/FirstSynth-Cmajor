@@ -103,6 +103,13 @@ export class DraggableModulator {
             cross.addEventListener('dragend', (e) => this.handleDragEnd(e));
         }
 
+        // Handle LFO cross drag
+        const lfoCross = this.parent.querySelector('.lfo-cross');
+        if (lfoCross) {
+            lfoCross.addEventListener('dragstart', (e) => this.handleDragStart(e, 'lfo', this.parent.activeLFOIndex));
+            lfoCross.addEventListener('dragend', (e) => this.handleDragEnd(e));
+        }
+
         // Handle destination cross drags
         const destCrosses = this.parent.querySelectorAll('.destination-cross');
         destCrosses.forEach(cross => {
@@ -191,8 +198,8 @@ export class DraggableModulator {
                 // For knobs, pass the knobId to valueResolver
                 resolvedValue = this.currentDragTarget.valueResolver(this.currentDragTarget.knobId);
             } else {
-                // For matrix sources/destinations, pass the source data
-                resolvedValue = this.currentDragTarget.valueResolver(sourceData);
+                // For matrix sources/destinations, pass the source data and type
+                resolvedValue = this.currentDragTarget.valueResolver(sourceData, sourceType);
             }
             
             this.currentDragTarget.element.value = resolvedValue;
@@ -252,6 +259,7 @@ export class DraggableModulator {
         if (zoneInfo) {
             zoneInfo.element.style.backgroundColor = 'rgba(78, 177, 47, 0.2)';
             zoneInfo.element.style.border = '1px solid rgba(78, 177, 47, 0.9)';
+            zoneInfo.element.style.borderRadius = '4px';
             zoneInfo.isHighlighted = true;
         }
     }
@@ -263,10 +271,12 @@ export class DraggableModulator {
         this.dropZones.forEach(z => {
             if (this.validZoneTypes.includes(z.type)) {
                 z.element.style.border = borderColor || '';
+                z.element.style.borderRadius = '4px';
                 z.element.style.backgroundColor = '';
             } else {
                 // Clear invalid zones
                 z.element.style.border = '';
+                z.element.style.borderRadius = '';
                 z.element.style.backgroundColor = '';
             }
             z.isHighlighted = false;
@@ -279,6 +289,7 @@ export class DraggableModulator {
     clearAllHighlights() {
         this.dropZones.forEach(z => {
             z.element.style.border = '';
+            z.element.style.borderRadius = '';
             z.element.style.backgroundColor = '';
             z.isHighlighted = false;
         });

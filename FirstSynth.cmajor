@@ -56,7 +56,9 @@ namespace Instrument {
         const int ENV3 = 6;
         const int KEYTRACK = 7;
         const int VELOCITY = 8;
-        const int SIZE = 9;
+        const int AFTERTOUCH = 9;
+        const int MOD_WHEEL = 10;
+        const int SIZE = 11;
     }
 
     namespace MtxDestination {
@@ -1129,6 +1131,7 @@ processor MyLfo(float32 initialShape = 0, float32 initialRate = 3.0f, float32 in
     float32 ramp;
     float32 rampIncrement;
     float32 lastRateModulationIn;
+    float32 currentRate;
 
     void init() {
         lfo.rateHzIn <- initialRate;
@@ -1138,6 +1141,7 @@ processor MyLfo(float32 initialShape = 0, float32 initialRate = 3.0f, float32 in
     }
 
     event rateIn(float32 newRate) {
+        currentRate = newRate;
         lfo.rateHzIn <- newRate;
     }
 
@@ -1158,7 +1162,7 @@ processor MyLfo(float32 initialShape = 0, float32 initialRate = 3.0f, float32 in
         loop
         {
             if (rateModulationIn != lastRateModulationIn) {
-                lfo.rateHzIn <- rateModulationIn + rateModulationIn;
+                lfo.rateHzIn <- currentRate + rateModulationIn;
                 lastRateModulationIn = rateModulationIn;
             }
 
@@ -1180,7 +1184,7 @@ processor MyLfo(float32 initialShape = 0, float32 initialRate = 3.0f, float32 in
 processor Voice
 {
     input {
-        event (std::notes::NoteOn, std::notes::NoteOff, std::notes::PitchBend) eventIn;
+        event (std::notes::NoteOn, std::notes::NoteOff, std::notes::PitchBend, std::notes::Aftertouch, std::notes::Control) eventIn;
         event Instrument::Params paramsIn;
         event Instrument::OscParams oscParamsIn;
         event Instrument::LfoParams lfoParamsIn;
@@ -1227,6 +1231,8 @@ processor Voice
     float32[Instrument::MtxDestination::SIZE] matrixDestOut;
     float32 velocity = 0.0f;
     float32 keytrack = 0.0f;
+    float32 aftertouch = 0.0f;
+    float32 modWheel = 0.0f;
     
 
     void init() {
@@ -1268,6 +1274,21 @@ processor Voice
         // Apply pitch bend to oscillators
         for (wrap<3> i) {
             oscillator[i].pitchBendIn <- pitchBendValue;
+        }
+    }
+
+
+    event eventIn (std::notes::Aftertouch e)
+    {
+        aftertouch = e.pressure;
+        console <- "Aftertouch: " <- aftertouch <- "\n";
+    }
+
+    event eventIn (std::notes::Control e)
+    {
+        if (e.control == 1) { // Modulation wheel
+            modWheel = e.value;
+            console <- "Mod Wheel: " <- modWheel <- "\n";
         }
     }
 
@@ -1334,6 +1355,10 @@ processor Voice
                     sourceValue = velocity; 
                 } else if (row.source == Instrument::MtxSource::KEYTRACK) {
                     sourceValue = keytrack; 
+                } else if (row.source == Instrument::MtxSource::AFTERTOUCH) {
+                    sourceValue = aftertouch; 
+                } else if (row.source == Instrument::MtxSource::MOD_WHEEL) {
+                    sourceValue = modWheel; 
                 }
                 float32 modulatedValue = sourceValue * row.multiplier;
 
