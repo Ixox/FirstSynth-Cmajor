@@ -171,7 +171,7 @@ namespace Instrument {
         p.filterType = 0;  // 0 = lowPass, 1 = highPass
                
         // Stereo Effects
-        p.stereoSpread = 0.3f;
+        p.stereoSpread = 0.5f;
         p.chorusAmount = 0.0f;
         
         // Global
@@ -267,7 +267,7 @@ namespace Instrument {
             // Filter
             event int filterCutoff            [[ name: "Filter Cutoff", min: 20, max: 20000, step: 1, init: 2000 ]];
             event int filterResonance         [[ name: "Filter Resonance", min: 20, max: 1000, step: 1, init: 50 ]];
-            event int filterType              [[ name: "Filter Type", min: 0, max: 1, step: 1, init: 0 ]];
+            event int filterType              [[ name: "Filter Type", min: 0, max: 3, step: 1, init: 1 ]];
 
             // Env 1,2,3
             event int env1Attack               [[ name: "Env 1 Attack", min: 1, max: 5000, step: 1, init: 10 ]];
@@ -297,7 +297,7 @@ namespace Instrument {
             event int lfo3WaveShape            [[ name: "LFO 3 WaveShape", min: 0, max: 5, step: 1, init: 0 ]];
             
             // Stereo Effects
-            event int stereoSpread            [[ name: "Stereo Spread", min: 0, max: 100, step: 1, init: 30 ]];
+            event int stereoSpread            [[ name: "Stereo Spread", min: 0, max: 100, step: 1, init: 50 ]];
             event int chorusAmount            [[ name: "Chorus Amount", min: 0, max: 100, step: 1, init: 0 ]];
             
             // Global
@@ -962,6 +962,9 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
 
     node {
         saturator = Saturator;
+        smoothedWaveShape = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
+        smoothedPan = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
+        smoothedGain = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
     }
 
     float32 phase;
@@ -972,6 +975,11 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
     float lastFrequency;
 
     Instrument::OscParams oscParams;
+    
+    // Smoothed modulation values
+    float32 smoothedWaveShapeValue = 0.0f;
+    float32 smoothedPanValue = 0.0f;
+    float32 smoothedGainValue = 0.0f;
 
     void init() {
         phase = 0.0f;
@@ -1010,7 +1018,7 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
     }
 
     int32 getWaveShape() {
-        return int32(((oscParams.waveshape + waveShapeModulationIn) % 100 + 100) % 100);
+        return int32(((oscParams.waveshape + smoothedWaveShapeValue) % 100 + 100) % 100);
     }
 
     float32 getModulatedPan(int32 basePan, float32 panMod) {
@@ -1023,6 +1031,21 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
     {
         loop
         {
+            // Update smoothing processors with current modulation values
+            smoothedWaveShape.in <- waveShapeModulationIn;
+            smoothedPan.in <- panModulationIn;
+            smoothedGain.in <- gainModulationIn;
+            
+            // Read smoothed modulation values from processors
+            smoothedWaveShapeValue = smoothedWaveShape.out;
+            smoothedPanValue = smoothedPan.out;
+            smoothedGainValue = smoothedGain.out;
+            
+            // Advance smoothing processors
+            smoothedWaveShape.advance();
+            smoothedPan.advance();
+            smoothedGain.advance();
+            
             // Interpolate between waveforms based on currentWaveShape (0-99)
             // 0=sine, 25=square, 50=sawtooth, 75=triangle
             float32 sample;
@@ -1063,11 +1086,11 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
             }
             
             beforeGainOut <- sample;
-            saturator.audioIn <- (sample + mixSignalIn) * (oscParams.gain + gainModulationIn);
+            saturator.audioIn <- (sample + mixSignalIn) * (oscParams.gain + smoothedGainValue);
             saturator.advance();
             audioOut <- saturator.audioOut;
-            if (panModulationIn != 0.0f) {
-                panOut <- getModulatedPan(oscParams.pan, panModulationIn);
+            if (smoothedPanValue != 0.0f) {
+                panOut <- getModulatedPan(oscParams.pan, smoothedPanValue);
             }
             phaseOut <- phase;
             previousPhase = phase;
@@ -1182,6 +1205,9 @@ processor Voice
         noiseGeneratorWhite = std::noise::White;
         noiseGeneratorPink = std::noise::Pink;
         noiseGeneratorBrown = std::noise::Brown;
+        
+        smoothedCutoffProcessor = std::smoothing::SmoothedValueStream(0.05f, 2000.0f);
+        smoothedResonanceProcessor = std::smoothing::SmoothedValueStream(0.05f, 0.5f);
     }
 
 
@@ -1231,16 +1257,10 @@ processor Voice
 
     event paramsIn (Instrument::Params paramsIn) {
         params = paramsIn;
-                      
-        // Filter
-        filterLowPassL.frequency <- paramsIn.filterCutoff;
-        filterLowPassL.q <- paramsIn.filterResonance;
-        filterHighPassL.frequency <- paramsIn.filterCutoff;
-        filterHighPassL.q <- paramsIn.filterResonance;
-        filterLowPassR.frequency <- paramsIn.filterCutoff;
-        filterLowPassR.q <- paramsIn.filterResonance;
-        filterHighPassR.frequency <- paramsIn.filterCutoff;
-        filterHighPassR.q <- paramsIn.filterResonance;        
+        
+        // Send new filter parameter targets to smoothing processors
+        smoothedCutoffProcessor.in <- paramsIn.filterCutoff;
+        smoothedResonanceProcessor.in <- paramsIn.filterResonance;
     }
 
     event oscParamsIn (Instrument::OscParams oscParamsIn) {
@@ -1406,27 +1426,62 @@ processor Voice
                 // Calculate Cutoff modulation
                 float32 cutOffModulation =  matrixDestOut[Instrument::MtxDestination::FILTER_CUTOFF] * 1000.0f;
                 float32 resonanceModulation = matrixDestOut[Instrument::MtxDestination::FILTER_RESONANCE];
+                
+                // Get smoothly interpolated filter parameters from processors
+                float32 smoothedCutoffValue = smoothedCutoffProcessor.out;
+                float32 smoothedResonanceValue = smoothedResonanceProcessor.out;
+                
+                // Advance smoothing processors
+                smoothedCutoffProcessor.advance();
+                smoothedResonanceProcessor.advance();
                                                 
                 // Pass through appropriate filter based on type (process stereo)
                 float<2> filteredSignal;
                 if (params.filterType == 0) {
-                    float32 modulatedCutoff = clamp(params.filterCutoff + cutOffModulation, 20.0f, 20000.0f);
+                    // No filter, just pass through
+                    filteredSignal = mixedOscillators;
+                } else if (params.filterType == 1) {
+                    float32 modulatedCutoff = clamp(smoothedCutoffValue + cutOffModulation, 20.0f, 20000.0f);
                     filterLowPassL.frequency <- modulatedCutoff;
                     filterLowPassR.frequency <- modulatedCutoff;
-                    filterLowPassL.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
-                    filterLowPassR.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
+                    filterLowPassL.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
+                    filterLowPassR.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
                     filterLowPassL.in <- mixedOscillators[0];
                     filterLowPassR.in <- mixedOscillators[1];
                     filteredSignal[0] = filterLowPassL.out;
                     filteredSignal[1] = filterLowPassR.out;
                     filterLowPassL.advance();
                     filterLowPassR.advance();
-                } else {
-                    float32 modulatedCutoff = clamp(params.filterCutoff + cutOffModulation, 20.0f, 20000.0f);
+                } else if (params.filterType == 2) {
+                    // Band-pass implemented as low-pass followed by high-pass
+                    float32 modulatedCutoff = clamp(smoothedCutoffValue + cutOffModulation, 20.0f, 20000.0f);
+                    filterLowPassL.frequency <- modulatedCutoff;
+                    filterLowPassR.frequency <- modulatedCutoff;
+                    filterLowPassL.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
+                    filterLowPassR.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
                     filterHighPassL.frequency <- modulatedCutoff;
                     filterHighPassR.frequency <- modulatedCutoff;
-                    filterHighPassL.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
-                    filterHighPassR.q <- max(0.1f, min(10.0f, params.filterResonance + resonanceModulation));
+                    filterHighPassL.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
+                    filterHighPassR.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
+                    
+                    // Chain: oscillators -> low-pass -> high-pass
+                    filterLowPassL.in <- mixedOscillators[0];
+                    filterLowPassR.in <- mixedOscillators[1];
+                    filterLowPassL.advance();
+                    filterLowPassR.advance();
+                    
+                    filterHighPassL.in <- filterLowPassL.out;
+                    filterHighPassR.in <- filterLowPassR.out;
+                    filteredSignal[0] = filterHighPassL.out;
+                    filteredSignal[1] = filterHighPassR.out;
+                    filterHighPassL.advance();
+                    filterHighPassR.advance();
+                } else if (params.filterType == 3) {
+                    float32 modulatedCutoff = clamp(smoothedCutoffValue + cutOffModulation, 20.0f, 20000.0f);
+                    filterHighPassL.frequency <- modulatedCutoff;
+                    filterHighPassR.frequency <- modulatedCutoff;
+                    filterHighPassL.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
+                    filterHighPassR.q <- max(0.1f, min(10.0f, smoothedResonanceValue + resonanceModulation));
                     filterHighPassL.in <- mixedOscillators[0];
                     filterHighPassR.in <- mixedOscillators[1];
                     filteredSignal[0] = filterHighPassL.out;
@@ -1514,14 +1569,22 @@ processor StereoSpread
     
     input event float32 spreadAmount;
 
+    node {
+        smoothedSpread = std::smoothing::SmoothedValueStream(0.05f, 0.5f);
+    }
+
     float stereoSpread;
     
     event spreadAmount (float32 a) {
-        stereoSpread = a;
+        smoothedSpread.in <- a;
     }
 
     void main() {
         loop {
+            // Get smoothed stereo spread value
+            stereoSpread = smoothedSpread.out;
+            smoothedSpread.advance();
+            
             // Apply stereo spread (mid-side processing)
             float32 mid = (audioIn[0] + audioIn[1]) * 0.5f;
             float32 side = (audioIn[0] - audioIn[1]) * 0.5f;
@@ -1542,6 +1605,10 @@ processor Chorus
     output stream float<2> audioOut;
     
     input event float32 amountIn;
+    
+    node {
+        smoothedAmount = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
+    }
     
     float32 amount = 0.0f;
     
@@ -1566,11 +1633,15 @@ processor Chorus
 
 
     event amountIn (float32 a) {
-        amount = a;
+        smoothedAmount.in <- a;
     }
     
     void main() {
         loop {
+            // Get smoothed amount value
+            amount = smoothedAmount.out;
+            smoothedAmount.advance();
+            
             // Write input to delay buffers
             if (amount > 0) {
                 delayBufferL.at(writePos) = audioIn[0];

@@ -118,8 +118,8 @@ export class WaveShapeKnob {
         // Draw inner knob body with shadow
         this.ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
         this.ctx.shadowBlur = 5;
-        this.ctx.shadowOffsetY = 2;
-        this.ctx.shadowOffsetX = 1;
+        this.ctx.shadowOffsetY = 5;
+        this.ctx.shadowOffsetX = 2;
         
         this.ctx.beginPath();
         this.ctx.arc(centerX, centerY, knobRadius, 0, 2 * Math.PI);

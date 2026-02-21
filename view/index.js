@@ -8,19 +8,8 @@ import { Filter } from './gui/Filter.js';
 import { PresetBank } from './gui/presets/presetBank.js';
 
 // Matrix Modulation Enums
-const MtxSource = {
-    NONE: 0,
-    LFO1: 1,
-    LFO2: 2,
-    LFO3: 3,
-    ENV1: 4,
-    ENV2: 5,
-    ENV3: 6,
-    KEYTRACK: 7,
-    VELOCITY: 8
-};
 
-const MtxSourceNames = {
+const MtxSource = {
     0: 'None',
     1: 'LFO 1',
     2: 'LFO 2',
@@ -53,6 +42,22 @@ const MtxDestination = {
     17: 'Lfo3 Rate'
 };
 
+
+const filterTypeNames = {
+    0: 'None',
+    1: 'Low Pass',
+    2: 'Band Pass',
+    3: 'High Pass'
+};
+
+const lfoWaveShapeNames = {
+    0: 'Sine',
+    1: 'Triangle',
+    2: 'Square',
+    3: 'Saw Up',
+    4: 'Saw Down',
+    5: 'Random'
+};
 
 class test_View extends HTMLElement
 {
@@ -110,7 +115,7 @@ class test_View extends HTMLElement
         this.mtxState = {
             rows: Array.from({length: 8}, (_, i) => ({
                 index: i,
-                source: MtxSource.NONE,
+                source: 0, // MtxSource.None
                 multiplier: 0.0,
                 dest1: 0,
                 dest2: 0
@@ -248,18 +253,6 @@ class test_View extends HTMLElement
         // Initial UI Sync
         this.refreshEnvelope();
         this.refreshLFO();
-
-
-
-        // Display event key and value 
-        this.patchConnection.addStoredStateValueListener(event => {
-            console.log(`#### Received stored state value update for key ${event.key}:`, JSON.stringify(event.value));
-        });
-
-        this.patchConnection.requestStoredStateValue("row0");
-        this.patchConnection.requestStoredStateValue("row3");
-
-        console.log("============================ connectedCallback done =============================");
     }
 
     initEnvelopeSelector()
@@ -319,7 +312,14 @@ class test_View extends HTMLElement
     initLFOWaveShapeButton()
     {
         const select = this.querySelector('#lfoWaveShape-select');
-        const waveNames = ['Sine', 'Triangle', 'Square', 'SawUp', 'SawDown', 'Random'];
+
+        // Populate LFO wave shape list
+        Object.entries(lfoWaveShapeNames).forEach(([key, name]) => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = name;
+            select.appendChild(option);
+        });
 
         select.addEventListener('change', (e) => {
             const newShape = parseInt(e.target.value);
@@ -534,6 +534,14 @@ class test_View extends HTMLElement
     {
         const selectElement = this.querySelector('#filterTypeSelect');
         
+        // Populate filter type list
+        Object.entries(filterTypeNames).forEach(([key, name]) => {
+            const option = document.createElement('option');
+            option.value = key;
+            option.textContent = name;
+            selectElement.appendChild(option);
+        });
+            
         const updateFilterType = () => {
             const value = parseInt(selectElement.value);
             this.patchConnection.sendEventOrValue('filterType', value);
@@ -577,7 +585,9 @@ class test_View extends HTMLElement
             const sourceSelect = document.createElement('select');
             sourceSelect.className = 'matrix-select';
             sourceSelect.id = `mtx-source-${i}`;
-            Object.entries(MtxSourceNames).forEach(([key, name]) => {
+            // Populate source options
+
+            Object.entries(MtxSource).forEach(([key, name]) => {
                 const option = document.createElement('option');
                 option.value = key;
                 option.textContent = name;

@@ -5,7 +5,8 @@ export class Filter {
         this.parentView = parentView;
         
         // State
-        this.filterType = 0; // 0 = low pass, 1 = high pass
+        // filterType: 0 = None, 1=Low Pass, 2=Band Pass, 3=High Pass
+        this.filterType = 1; // Default to Low Pass
         this.cutoff = 2000;
         this.resonance = 50;
         
@@ -26,7 +27,7 @@ export class Filter {
     updateValue(paramName, value) {
         switch(paramName) {
             case 'filterType':
-                this.filterType = value;
+                this.filterType = value;                
                 break;
             case 'filterCutoff':
                 this.cutoff = value;
@@ -186,11 +187,20 @@ export class Filter {
         const denom = Math.sqrt(Math.max(0.001, denomSquared));
         
         if (this.filterType === 0) {
+            // None: flat response across all frequencies
+            return 1;
+        } else if (this.filterType === 1) {
             // Low Pass: output magnitude = 1 / denominator
             return 1 / denom;
-        } else {
+        } else if (this.filterType === 2) {
+            // Band Pass: output magnitude = normalizedFreq / denominator
+            // Creates a peak at cutoff frequency with roll-off on both sides
+            return normalizedFreq / denom;
+        } else if (this.filterType === 3) {
             // High Pass: output magnitude = w² / denominator
             return w2 / denom;
         }
+        
+        return 1; // Default fallback
     }    
 }

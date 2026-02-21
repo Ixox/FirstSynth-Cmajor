@@ -4,7 +4,7 @@
     "ID":               "com.Ixox.FirstSynth",
     "version":          "0.1",
     "name":             "FirstSynth",
-    "description":      "A simple synthesizer patch 2.",
+    "description":      "A simple subtractive synthesizer",
     "category":         "generator",
     "manufacturer":     "Ixox",
     "isInstrument":     true,

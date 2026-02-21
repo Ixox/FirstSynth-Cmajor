@@ -1,4 +1,3 @@
-. Automorph Rate : step should be 0.1
-. HTML : color button in each panel
-. Use std::oscillators:LFO for Filter LFO
-. Filter: add 'None' option
+. pitchBend does not work
+. CC to remap
+. Modwheel in the matrix
