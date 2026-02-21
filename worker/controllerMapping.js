@@ -14,11 +14,11 @@ export class ControllerMappings {
             21: { parameter: 'filterCutoff', mapping: v => 20 * Math.pow(1000, v / 127) },          
             22: { parameter: 'filterResonance', mapping: v => 20 + (v / 127) * 980 },       
             23: { parameter: 'lfo1Rate', mapping: v => Math.round(10 + (v / 127) * 590) },              
-            24: { parameter: 'lfo2Rate', mapping: v => Math.round(10 + (v / 127) * 590) },              
-            25: { parameter: 'lfo3Rate', mapping: v => Math.round(10 + (v / 127) * 590) },
-            26: { parameter: 'mtxRow1Multiplier', mapping: v => -10 + (v / 127) * 20 },
-            27: { parameter: 'mtxRow2Multiplier', mapping: v => -10 + (v / 127) * 20 },
-            28: { parameter: 'mtxRow3Multiplier', mapping: v => -10 + (v / 127) * 20 }
+            24: { parameter: 'env1Attack', mapping: v => Math.round((v / 127) * 5000) }, // 0-5 seconds
+            25: { parameter: 'mtxRow1Multiplier', mapping: v => -10 + (v / 127) * 20 },
+            26: { parameter: 'osc1Waveshape', mapping: v => Math.round((v / 127) * 99) }, // Map to 0-99 for waveform selection
+            27: { parameter: 'osc2Waveshape', mapping: v => Math.round((v / 127) * 99) },
+            28: { parameter: 'osc3Waveshape', mapping: v => Math.round((v / 127) * 99) },
         };
 
         // Track active parameters to avoid redundant sends
@@ -42,6 +42,7 @@ export class ControllerMappings {
      */
     applyController(patchConnection, controllerNumber, controllerValue) {
 
+
         const mapping = this.defaultMappings[controllerNumber];
         
         if (!mapping) {
@@ -62,7 +63,6 @@ export class ControllerMappings {
         // Convert MIDI value (0-127) to appropriate range for parameter
         const mappedValue = mapping.mapping(controllerValue);
         
-        // Send to patch
         patchConnection.sendEventOrValue(paramName, mappedValue);
     }
 

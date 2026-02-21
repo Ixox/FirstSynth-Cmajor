@@ -237,7 +237,7 @@ namespace Instrument {
             event float32 osc1Transpose       [[ name: "Osc 1 Transpose", min: -48, max: 48, step: 1, init: 0 ]];
             event int osc1Detune              [[ name: "Osc 1 Detune", min: -50, max: 50, step: 1, init: 0 ]];
             event int osc1Gain                [[ name: "Osc 1 Gain", min: 0, max: 141, step: 1, init: 80 ]];
-            event int osc1WaveshapeIn         [[ name: "Osc 1 Waveshape", min: 0, max: 99, step: 1, init: 15 ]];
+            event int osc1Waveshape           [[ name: "Osc 1 Waveshape", min: 0, max: 99, step: 1, init: 15 ]];
             event int osc1Pan                 [[ name: "Osc 1 Pan", min: -100, max: 100, step: 1, init: 0 ]];
             event int osc1Saturation          [[ name: "Osc 1 Saturation", min: 0, max: 100, step: 1, init: 0 ]];
             event int osc1SaturationType      [[ name: "Osc 1 Saturation Type", min: 0, max: 3, step: 1, init: 0 ]];
@@ -246,7 +246,7 @@ namespace Instrument {
             event float32 osc2Transpose       [[ name: "Osc 2 Transpose", min: -48, max: 48, step: 1, init: 0 ]];
             event int osc2Detune              [[ name: "Osc 2 Detune", min: -50, max: 50, step: 1, init: 5 ]];
             event int osc2Gain                [[ name: "Osc 2 Gain", min: 0, max: 141, step: 1, init: 50 ]];
-            event int osc2WaveshapeIn         [[ name: "Osc 2 Waveshape", min: 0, max: 99, step: 1, init: 0 ]];
+            event int osc2Waveshape           [[ name: "Osc 2 Waveshape", min: 0, max: 99, step: 1, init: 0 ]];
             event int osc2Sync                [[ name: "Osc 2 Sync", min: 0, max: 1, step: 1, init: 0 ]];
             event int osc2Pan                 [[ name: "Osc 2 Pan", min: -100, max: 100, step: 1, init: 0 ]];
             event int osc2Saturation          [[ name: "Osc 2 Saturation", min: 0, max: 100, step: 1, init: 0 ]];
@@ -256,7 +256,7 @@ namespace Instrument {
             event float32 osc3Transpose       [[ name: "Osc 3 Transpose", min: -48, max: 48, step: 1, init: 0 ]];
             event int osc3Detune              [[ name: "Osc 3 Detune", min: -50, max: 50, step: 1, init: 0 ]];
             event int osc3Gain                [[ name: "Osc 3 Gain", min: 0, max: 141, step: 1, init: 30 ]];
-            event int osc3WaveshapeIn         [[ name: "Osc 3 Waveshape", min: 0, max: 99, step: 1, init: 0 ]];
+            event int osc3Waveshape           [[ name: "Osc 3 Waveshape", min: 0, max: 99, step: 1, init: 0 ]];
             event int osc3Pan                 [[ name: "Osc 3 Pan", min: -100, max: 100, step: 1, init: 0 ]];
             event int osc3Saturation          [[ name: "Osc 3 Saturation", min: 0, max: 100, step: 1, init: 0 ]];
             event int osc3SaturationType      [[ name: "Osc 3 Saturation Type", min: 0, max: 3, step: 1, init: 0 ]];
@@ -384,7 +384,7 @@ namespace Instrument {
             oscParams.at(0).gain = float(i) / 100.0f;
             oscParamsOut <- oscParams.at(0);
         }
-        event osc1WaveshapeIn(int i) {
+        event osc1Waveshape(int i) {
             oscParams.at(0).waveshape = i;
             oscParamsOut <- oscParams.at(0);
         }
@@ -414,7 +414,7 @@ namespace Instrument {
             oscParams.at(1).gain = float(i) / 100.0f;
             oscParamsOut <- oscParams.at(1);
         }
-        event osc2WaveshapeIn(int i) {
+        event osc2Waveshape(int i) {
             oscParams.at(1).waveshape = i;
             oscParamsOut <- oscParams.at(1);
         }
@@ -448,7 +448,7 @@ namespace Instrument {
             oscParams.at(2).gain = float(i) / 100.0f;
             oscParamsOut <- oscParams.at(2);
         }
-        event osc3WaveshapeIn(int i) {
+        event osc3Waveshape(int i) {
             oscParams.at(2).waveshape = i;
             oscParamsOut <- oscParams.at(2);
         }
@@ -965,10 +965,10 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
 
     node {
         saturator = Saturator;
-        smoothedWaveShape = std::smoothing::SmoothedValueStream(0.02f, 0.0f);
         smoothedPan = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
         smoothedGain = std::smoothing::SmoothedValueStream(0.05f, 0.0f);
         smoothedPitchBend = std::smoothing::SmoothedValueStream(0.02f, 0.0f);
+        smoothedWaveShape = std::smoothing::SmoothedValueStream(0.1f, 0.0f);
     }
 
     float32 phase;
@@ -981,7 +981,6 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
     Instrument::OscParams oscParams;
     
     // Smoothed modulation values
-    float32 smoothedWaveShapeValue = 0.0f;
     float32 smoothedPanValue = 0.0f;
     float32 smoothedGainValue = 0.0f;
     float32 smoothedPitchBendValue = 0.0f;
@@ -1022,11 +1021,7 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
         phase = 0.0f;
     }
 
-    int32 getWaveShape() {
-        return int32(((oscParams.waveshape + smoothedWaveShapeValue) % 100 + 100) % 100);
-    }
-
-    float32 getModulatedPan(int32 basePan, float32 panMod) {
+        float32 getModulatedPan(int32 basePan, float32 panMod) {
         // basePan is -100 to 100, panMod is -1.0 to 1.0
         float32 modulatedPan = basePan + (panMod * 100.0f);
         return max(-100.0f, min(100.0f, modulatedPan));
@@ -1037,19 +1032,16 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
         loop
         {
             // Update smoothing processors with current modulation values
-            smoothedWaveShape.in <- waveShapeModulationIn;
             smoothedPan.in <- panModulationIn;
             smoothedGain.in <- gainModulationIn;
             smoothedPitchBend.in <- pitchBendIn;
             
             // Read smoothed modulation values from processors
-            smoothedWaveShapeValue = smoothedWaveShape.out;
             smoothedPanValue = smoothedPan.out;
             smoothedGainValue = smoothedGain.out;
             smoothedPitchBendValue = smoothedPitchBend.out;
             
             // Advance smoothing processors
-            smoothedWaveShape.advance();
             smoothedPan.advance();
             smoothedGain.advance();
             smoothedPitchBend.advance();
@@ -1057,7 +1049,20 @@ processor MyOscillator(float32 initialGain = 1.0, float intialFrequency = 3.0f)
             // Interpolate between waveforms based on currentWaveShape (0-99)
             // 0=sine, 25=square, 50=sawtooth, 75=triangle
             float32 sample;
-            int32 waveValue = getWaveShape();
+
+            smoothedWaveShape.in <- oscParams.waveshape + waveShapeModulationIn * 10.0f; // Modulate waveshape by up to 10 steps
+            float32 waveValue = smoothedWaveShape.out;
+            // Make sure wavaValue is within 0-99 after modulation
+            // 101 must be 1, 102 must be 2, etc. to wrap around
+            // -2 must be 98, -1 must be 99, etc.
+            while (waveValue < 0.0f || waveValue >= 100.0f) {
+                if (waveValue < 0.0f) {
+                    waveValue = 100.0f + fmod(waveValue, 100.0f);
+                } else {
+                    waveValue = fmod(waveValue, 100.0f);
+                }
+            }
+            smoothedWaveShape.advance();
 
             float32 modulatedFrequency = baseFrequency * pow(2.0f, pitchModulationIn / 12.0f + smoothedPitchBendValue);
 

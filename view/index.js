@@ -236,9 +236,9 @@ class test_View extends HTMLElement
         }
 
         // Initialize oscillator 1 and 2 waveshape knobs
-        this.initWaveshapeKnob('osc1WaveshapeIn', "#8299f9");
-        this.initWaveshapeKnob('osc2WaveshapeIn', "#26ee9b");
-        this.initWaveshapeKnob('osc3WaveshapeIn', "#eea826");
+        this.initWaveshapeKnob('osc1Waveshape', "#8299f9");
+        this.initWaveshapeKnob('osc2Waveshape', "#26ee9b");
+        this.initWaveshapeKnob('osc3Waveshape', "#eea826");
         
         // Initialize OSC2 sync button
         this.initSyncButton();
