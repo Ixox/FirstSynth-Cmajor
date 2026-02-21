@@ -217,7 +217,7 @@
   <!-- Row 3: Envelopes, LFOs, and Master -->
   <div class="modules-row">
     <!-- Envelope -->
-    <div class="module red">
+    <div class="module red" style="flex: 2;">
       <div class="module-header">
         <span>Envelopes</span>
         <div class="envelope-selector">
@@ -270,7 +270,7 @@
     </div>
 
     <!-- LFO -->
-    <div class="module cyan">
+    <div class="module cyan" style="flex: 2;">
       <div class="module-header">
         <span>LFOs</span>
         <div class="lfo-selector">
@@ -320,7 +320,7 @@
     </div>
 
     <!-- Midi Wheels -->
-    <div class="module">
+    <div class="module" style="flex: 1;">
       <div class="module-header">Midi Activity</div>
       <div class="module-content synth-wheel-container">
         <div class="midi-note-display" id="currentNoteDisplay">—</div>
@@ -336,10 +336,10 @@
     </div>
 
     <!-- Master -->
-    <div class="module pink">
+    <div class="module pink" style="flex: 1;">
       <div class="module-header">Master</div>
       <div class="module-content master-compact">
-        <div class="control-group horizontal">
+        <div class="control-group">
           <div class="control">
             <div class="control-label">Spread</div>
             <canvas class="control-canvas" id="stereoSpread-canvas"></canvas>

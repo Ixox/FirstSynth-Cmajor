@@ -682,7 +682,7 @@ select option {
     overflow-x: auto;
     max-width: 100%;
 }
-}
+
 
 .matrix-content {
     overflow-x: auto;
@@ -756,6 +756,7 @@ select option {
     color: #9eb3db;
     letter-spacing: 1px;
 }
+
 
 
 /* Responsive adjustments 

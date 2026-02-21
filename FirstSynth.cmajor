@@ -1286,14 +1286,12 @@ processor Voice
     event eventIn (std::notes::Aftertouch e)
     {
         aftertouch = e.pressure;
-        console <- "Aftertouch: " <- aftertouch <- "\n";
     }
 
     event eventIn (std::notes::Control e)
     {
         if (e.control == 1) { // Modulation wheel
             modWheel = e.value;
-            console <- "Mod Wheel: " <- modWheel <- "\n";
         }
     }
 
