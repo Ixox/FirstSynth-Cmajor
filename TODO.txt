@@ -1,3 +1,0 @@
-. Modwheel in the matrix
-. CC to remap
-. Clean drag and drop (not used anymore)

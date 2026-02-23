@@ -216,6 +216,24 @@
 
   <!-- Row 3: Envelopes, LFOs, and Master -->
   <div class="modules-row">
+
+    <!-- Midi activities -->
+    <div class="module" style="flex: 1;">
+      <div class="module-header">Midi Activity</div>
+      <div class="module-content synth-wheel-container">
+        <div class="midi-note-display" id="currentNoteDisplay">—</div>
+        <div>
+          <div class="midi-activity-label">PB</div>
+          <canvas class="synth-wheel" id="pitchBendWheel"></canvas>
+        </div>
+        <div>
+          <div class="midi-activity-label">MW</div>
+          <canvas class="synth-wheel" id="modWheelWheel"></canvas>
+        </div>
+      </div>
+    </div>
+
+
     <!-- Envelope -->
     <div class="module red" style="flex: 2;">
       <div class="module-header">
@@ -315,22 +333,6 @@
             <div class="control-label">Ramp</div>
             <canvas class="control-canvas" id="lfoRamp-canvas"></canvas>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Midi Wheels -->
-    <div class="module" style="flex: 1;">
-      <div class="module-header">Midi Activity</div>
-      <div class="module-content synth-wheel-container">
-        <div class="midi-note-display" id="currentNoteDisplay">—</div>
-        <div>
-          <div class="midi-activity-label">PB</div>
-          <canvas class="synth-wheel" id="pitchBendWheel"></canvas>
-        </div>
-        <div>
-          <div class="midi-activity-label">MW</div>
-          <canvas class="synth-wheel" id="modWheelWheel"></canvas>
         </div>
       </div>
     </div>
