@@ -84,7 +84,7 @@ const parameterListener = event =>
 // Helper function to convert MIDI note number to note name
 function getMidiNoteName(noteNumber) {
     const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-    const octave = Math.floor(noteNumber / 12) - 1;
+    const octave = Math.floor(noteNumber / 12) - 2;
     const noteInOctave = noteNumber % 12;
     return noteNames[noteInOctave] + octave;
 }

@@ -148,8 +148,6 @@ class test_View extends HTMLElement
         
         // Initialize matrix multiplier knobs container
         this.mtxMultiplierKnobs = {};
-
-
     }    
 
     connectedCallback()
@@ -178,6 +176,9 @@ class test_View extends HTMLElement
 
         // Initialize Synth Wheels
         this.initSynthWheels();
+
+        // Initialize MIDI Keyboard
+        this.initKeyboard();
 
         // Initialize Preset Selector
         this.presetBank = new PresetBank();
@@ -703,6 +704,26 @@ class test_View extends HTMLElement
         });
     }
 
+    initKeyboard()
+    {
+        this.keyboardElement = this.querySelector("#Keyboard");
+        
+        if (this.keyboardElement) {
+            this.keyboardElement.addEventListener("note-down", (note) => this.sendNoteOnOffToPatch (note.detail.note, true));
+            this.keyboardElement.addEventListener("note-up",   (note) => this.sendNoteOnOffToPatch (note.detail.note, false));
+            this.patchConnection.addEndpointListener ("midiIn", message => {
+                this.keyboardElement.handleExternalMIDI (message.message);
+            });
+        }
+    }
+
+    sendNoteOnOffToPatch (note, isOn)
+    {
+        const controlByte = isOn ? 0x900000 : 0x800000;
+        const velocity = 100;
+        this.patchConnection.sendMIDIInputEvent ("midiIn", controlByte | (note << 8) | velocity);
+    }
+
     updateCurrentNoteDisplay(noteName)
     {
         if (!this.noteDisplay) {
@@ -962,6 +983,54 @@ class test_View extends HTMLElement
 
 window.customElements.define ("test-view", test_View);
 
+function registerCustomElement (name, element)
+{
+    if (! window.customElements.get (name))
+        window.customElements.define (name, element);
+}
+
+//==============================================================================
+let midiKeyboard;
+
+function defineKeyboardElement (patchConnection)
+{
+    if (!midiKeyboard)
+    {
+        midiKeyboard = class extends patchConnection.utilities.PianoKeyboard
+        {
+            constructor()
+            {
+                super ({ naturalNoteWidth: 18.58,
+                        accidentalWidth: 11,
+                        accidentalPercentageHeight: 62,
+                        pressedNoteColour: "#00000044" });
+            }
+        }
+
+/*
+        const midiKeyboardHTML = `
+            <div style="width:300px; height: 120px; margin: 20px auto; background-color: #F00; border-radius: 8px; padding: 10px; box-sizing: border-box;">
+                <span style="color: #FFF; font-weight: bold;">MIDI Keyboard</span>
+            </div>
+        `;
+
+        midiKeyboard = class extends HTMLElement
+        {
+            constructor()
+            {
+                super();
+                this.attachShadow({ mode: 'open' });
+                this.shadowRoot.innerHTML = midiKeyboardHTML;
+            }
+        }
+*/
+
+        registerCustomElement ("midi-keyboard", patchConnection.utilities.PianoKeyboard);
+        console.log("MIDI Keyboard element defined");
+    }
+}
+
+
 /* This is the function that a host (the command line patch player, or a Cmajor plugin
    loader, or our VScode extension, etc) will call in order to create a view for your patch.
 
@@ -971,5 +1040,6 @@ window.customElements.define ("test-view", test_View);
 */
 export default function createPatchView (patchConnection)
 {    
+    defineKeyboardElement(patchConnection);
     return new test_View (patchConnection);
 }
