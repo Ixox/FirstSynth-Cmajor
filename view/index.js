@@ -128,7 +128,26 @@ class test_View extends HTMLElement
         super();
         this.patchConnection = patchConnection;
         this.classList = "main-view-element";
-        this.innerHTML = this.getHTML();
+        this.attachShadow({ mode: "open" });
+        this.shadowRoot.innerHTML = this.getHTML();
+        
+        // Override querySelector and querySelectorAll to look in shadowRoot
+        // This allows child components to find elements in the shadow DOM
+        const originalQuerySelector = this.querySelector.bind(this);
+        const originalQuerySelectorAll = this.querySelectorAll.bind(this);
+        
+        this.querySelector = (selector) => {
+            const shadowElement = this.shadowRoot.querySelector(selector);
+            if (shadowElement) return shadowElement;
+            return originalQuerySelector(selector);
+        };
+        
+        this.querySelectorAll = (selector) => {
+            const shadowElements = this.shadowRoot.querySelectorAll(selector);
+            if (shadowElements.length > 0) return shadowElements;
+            return originalQuerySelectorAll(selector);
+        };
+        
         this.listeners = {};
         this.activeEnvIndex = 1; // 1, 2, or 3
         this.envParamsState = {};
@@ -152,129 +171,140 @@ class test_View extends HTMLElement
 
     connectedCallback()
     {
-        // Initialize state for the envelopes correctly
-        this.envParamsState = {
-            env1Attack: 10, env1Decay: 100, env1Sustain: 70, env1Release: 300,
-            env2Attack: 10, env2Decay: 100, env2Sustain: 70, env2Release: 300,
-            env3Attack: 10, env3Decay: 100, env3Sustain: 70, env3Release: 300
+        // Temporarily override document.getElementById to check shadowRoot first
+        // This allows all components to find canvas elements in the shadowRoot
+        const originalGetElementById = document.getElementById;
+        const self = this;
+        document.getElementById = (id) => {
+            const shadowElement = self.shadowRoot.getElementById(id);
+            if (shadowElement) return shadowElement;
+            return originalGetElementById.call(document, id);
         };
+        
+        try {
+            // Initialize state for the envelopes correctly
+            this.envParamsState = {
+                env1Attack: 10, env1Decay: 100, env1Sustain: 70, env1Release: 300,
+                env2Attack: 10, env2Decay: 100, env2Sustain: 70, env2Release: 300,
+                env3Attack: 10, env3Decay: 100, env3Sustain: 70, env3Release: 300
+            };
 
-        // Initialize Envelope Visualization next
-        this.envelope = new Envelope('envelope-canvas', this);
+            // Initialize Envelope Visualization next
+            this.envelope = new Envelope('envelope-canvas', this);
 
-        this.lfoParamsState = {
-            lfo1WaveShape: 0, lfo1Rate: 50, lfo1Ramp: 0,
-            lfo2WaveShape: 0, lfo2Rate: 50, lfo2Ramp: 0,
-            lfo3WaveShape: 0, lfo3Rate: 50, lfo3Ramp: 0
-        };
+            this.lfoParamsState = {
+                lfo1WaveShape: 0, lfo1Rate: 50, lfo1Ramp: 0,
+                lfo2WaveShape: 0, lfo2Rate: 50, lfo2Ramp: 0,
+                lfo3WaveShape: 0, lfo3Rate: 50, lfo3Ramp: 0
+            };
 
-        // Initialize LFO Visualization
-        this.lfo = new LFO('lfo-canvas', this);
+            // Initialize LFO Visualization
+            this.lfo = new LFO('lfo-canvas', this);
 
-        // Initialize Filter Visualization
-        this.filter = new Filter('filter-visualization-canvas', this);
+            // Initialize Filter Visualization
+            this.filter = new Filter('filter-visualization-canvas', this);
 
-        // Initialize Synth Wheels
-        this.initSynthWheels();
+            // Initialize Synth Wheels
+            this.initSynthWheels();
 
-        // Initialize MIDI Keyboard
-        this.initKeyboard();
+            // Initialize MIDI Keyboard
+            this.initKeyboard();
 
-        // Initialize Preset Selector
-        this.presetBank = new PresetBank();
-        const presetSelect = this.querySelector('#preset-list');
-        if (presetSelect) {
-            // Clear the loading message
-            presetSelect.innerHTML = '';
-            
-            // Populate preset list
-            const presetList = this.presetBank.getPresetList();
-            presetList.forEach(preset => {
-                const option = document.createElement('option');
-                option.value = preset.index;
-                option.textContent = preset.name;
-                presetSelect.appendChild(option);
-            });
-            
-            // Add change event listener to load preset
-            presetSelect.addEventListener('change', (e) => {
-                const presetIndex = parseInt(e.target.value);
-                if (!isNaN(presetIndex)) {
-                    this.presetBank.sendParametersToPatchConnection(this.patchConnection, presetIndex);
-                }
-            });
-        }
-
-        // Initialize All Hidden Parameter Listeners for Envelopes
-        for (let i = 1; i <= 3; i++) {
-            ['env*Attack', 'env*Decay', 'env*Sustain', 'env*Release'].forEach(stage => {
-                const paramId = stage.replace('*', i.toString());
+            // Initialize Preset Selector
+            this.presetBank = new PresetBank();
+            const presetSelect = this.shadowRoot.querySelector('#preset-list');
+            if (presetSelect) {
+                // Clear the loading message
+                presetSelect.innerHTML = '';
                 
-                this.patchConnection.addParameterListener(paramId, value => {
-                    this.envParamsState[paramId] = value;
-                    if (this.activeEnvIndex === i) {
-                        this.updateEnvelopeKnob(paramId, value);
+                // Populate preset list
+                const presetList = this.presetBank.getPresetList();
+                presetList.forEach(preset => {
+                    const option = document.createElement('option');
+                    option.value = preset.index;
+                    option.textContent = preset.name;
+                    presetSelect.appendChild(option);
+                });
+                
+                // Add change event listener to load preset
+                presetSelect.addEventListener('change', (e) => {
+                    const presetIndex = parseInt(e.target.value);
+                    if (!isNaN(presetIndex)) {
+                        this.presetBank.sendParametersToPatchConnection(this.patchConnection, presetIndex);
                     }
                 });
-                this.patchConnection.requestParameterValue(paramId);
-            });
-        }
+            }
 
-        // Initialize All Parameter Listeners for LFOs
-        for (let i = 1; i <= 3; i++) {
-            ['lfo*WaveShape', 'lfo*Rate', 'lfo*Ramp'].forEach(param => {
-                const paramId = param.replace('*', i.toString());
-                
-                this.patchConnection.addParameterListener(paramId, value => {
-
-                    this.lfoParamsState[paramId] = value;
-                    if (this.activeLFOIndex === i) {
-                        this.updateLFOControl(paramId, value);
-                    }
+            // Initialize All Hidden Parameter Listeners for Envelopes
+            for (let i = 1; i <= 3; i++) {
+                ['env*Attack', 'env*Decay', 'env*Sustain', 'env*Release'].forEach(stage => {
+                    const paramId = stage.replace('*', i.toString());
+                    
+                    this.patchConnection.addParameterListener(paramId, value => {
+                        this.envParamsState[paramId] = value;
+                        if (this.activeEnvIndex === i) {
+                            this.updateEnvelopeKnob(paramId, value);
+                        }
+                    });
+                    this.patchConnection.requestParameterValue(paramId);
                 });
-                this.patchConnection.requestParameterValue(paramId);
+            }
+
+            // Initialize All Parameter Listeners for LFOs
+            for (let i = 1; i <= 3; i++) {
+                ['lfo*WaveShape', 'lfo*Rate', 'lfo*Ramp'].forEach(param => {
+                    const paramId = param.replace('*', i.toString());
+                    
+                    this.patchConnection.addParameterListener(paramId, value => {
+
+                        this.lfoParamsState[paramId] = value;
+                        if (this.activeLFOIndex === i) {
+                            this.updateLFOControl(paramId, value);
+                        }
+                    });
+                    this.patchConnection.requestParameterValue(paramId);
+                });
+            }
+
+            // Initialize oscillator 1 and 2 waveshape knobs
+            this.initWaveshapeKnob('osc1Waveshape', "#8299f9");
+            this.initWaveshapeKnob('osc2Waveshape', "#26ee9b");
+            this.initWaveshapeKnob('osc3Waveshape', "#eea826");
+            
+            // Initialize OSC2 sync button
+            this.initSyncButton();
+            
+            // Initialize saturation type buttons
+            this.initSaturationTypeButton('osc1SaturationType');
+            this.initSaturationTypeButton('osc2SaturationType');
+            this.initSaturationTypeButton('osc3SaturationType');
+
+            // Initialize noise type button
+            this.initNoiseTypeButton();
+
+            // Initialize Filter Type
+            this.initFilterTypeSelect();
+
+            // Initialize all knobs (including new envelope ones)
+            this.allKnobs.forEach(knobInfo => {
+                this.initKnob(knobInfo);
             });
-        }
+            
+            // Initialize Selectors
+            this.initEnvelopeSelector();
+            this.initLFOSelector();
 
-        // Initialize oscillator 1 and 2 waveshape knobs
-        this.initWaveshapeKnob('osc1Waveshape', "#8299f9");
-        this.initWaveshapeKnob('osc2Waveshape', "#26ee9b");
-        this.initWaveshapeKnob('osc3Waveshape', "#eea826");
-        
-        // Initialize OSC2 sync button
-        this.initSyncButton();
-        
-        // Initialize saturation type buttons
-        this.initSaturationTypeButton('osc1SaturationType');
-        this.initSaturationTypeButton('osc2SaturationType');
-        this.initSaturationTypeButton('osc3SaturationType');
+            // Initialize LFO Controls
+            this.initLFOWaveShapeButton();
 
-        // Initialize noise type button
-        this.initNoiseTypeButton();
+            // Matrix updates are now handled through individual mtxRowN events
+            // (mtxRowNSource, mtxRowNMultiplier, mtxRowNDest1, mtxRowNDest2)
 
-        // Initialize Filter Type
-        this.initFilterTypeSelect();
+            // Initialize Matrix Modulation UI first (creates the drop zone elements)
+            this.initMatrixRows();
 
-        // Initialize all knobs (including new envelope ones)
-        this.allKnobs.forEach(knobInfo => {
-            this.initKnob(knobInfo);
-        });
-        
-        // Initialize Selectors
-        this.initEnvelopeSelector();
-        this.initLFOSelector();
-
-        // Initialize LFO Controls
-        this.initLFOWaveShapeButton();
-
-        // Matrix updates are now handled through individual mtxRowN events
-        // (mtxRowNSource, mtxRowNMultiplier, mtxRowNDest1, mtxRowNDest2)
-
-        // Initialize Matrix Modulation UI first (creates the drop zone elements)
-        this.initMatrixRows();
-
-        // Configure drop zones for draggable modulator
-        const dropZoneConfig = {
+            // Configure drop zones for draggable modulator
+            const dropZoneConfig = {
             MATRIX_SOURCE: {
                 selector: '.matrix-row',
                 selectIndex: 0,  // First .matrix-select in each row
@@ -316,11 +346,15 @@ class test_View extends HTMLElement
         // Initial UI Sync
         this.refreshEnvelope();
         this.refreshLFO();
+        } finally {
+            // Restore original document.getElementById
+            document.getElementById = originalGetElementById;
+        }
     }
 
     initEnvelopeSelector()
     {
-        const buttons = this.querySelectorAll('.envelope-selector .selector-btn');
+        const buttons = this.shadowRoot.querySelectorAll('.envelope-selector .selector-btn');
         
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -399,7 +433,7 @@ class test_View extends HTMLElement
     // Initialization for the 3 buttons to select active LFO
     initLFOSelector()
     {
-        const buttons = this.querySelectorAll('.lfo-selector .selector-btn');
+        const buttons = this.shadowRoot.querySelectorAll('.lfo-selector .selector-btn');
         
         buttons.forEach(btn => {
             btn.addEventListener('click', () => {
@@ -415,7 +449,7 @@ class test_View extends HTMLElement
     // Initialization for LFO Wave Shape selector
     initLFOWaveShapeButton()
     {
-        const select = this.querySelector('#lfoWaveShape-select');
+        const select = this.shadowRoot.querySelector('#lfoWaveShape-select');
 
         // Populate LFO wave shape list
         Object.entries(lfoWaveShapeNames).forEach(([key, name]) => {
@@ -453,7 +487,7 @@ class test_View extends HTMLElement
     {    
         const uiParamName = paramId.replace(/lfo\d/, 'lfo');
         if (uiParamName === 'lfoWaveShape') {
-            const select = this.querySelector('#lfoWaveShape-select');
+            const select = this.shadowRoot.querySelector('#lfoWaveShape-select');
             select.value = value;
             this.lfo.updateValue(uiParamName, value);
         } else if (uiParamName === 'lfoRate') {
@@ -488,8 +522,9 @@ class test_View extends HTMLElement
             this.patchConnection.sendEventOrValue(realParamName, roundedValue);
         }
 
+        const canvasId = `${knobInfo.id}-canvas`;
         const knob = new RotaryKnob(
-            `${knobInfo.id}-canvas`,
+            canvasId,
             knobInfo.id,
             this.patchConnection,
             callback, 
@@ -563,7 +598,7 @@ class test_View extends HTMLElement
 
     initSyncButton()
     {
-        const syncButton = this.querySelector('#osc2-sync-button');
+        const syncButton = this.shadowRoot.querySelector('#osc2-sync-button');
         let syncActive = false;
 
         syncButton.addEventListener('click', () => {
@@ -585,7 +620,7 @@ class test_View extends HTMLElement
 
     initSaturationTypeButton(paramId)
     {
-        const button = this.querySelector(`#${paramId}-button`);
+        const button = this.shadowRoot.querySelector(`#${paramId}-button`);
         const typeNames = [' No ', 'Tube', 'Clip', 'Wave'];
         let currentType = 0;
 
@@ -610,7 +645,7 @@ class test_View extends HTMLElement
 
     initNoiseTypeButton()
     {
-        const button = this.querySelector('#osc3NoiseType-button');
+        const button = this.shadowRoot.querySelector('#osc3NoiseType-button');
         const typeNames = ['White', 'Pink', 'Brown'];
         let currentType = 0;
 
@@ -635,7 +670,7 @@ class test_View extends HTMLElement
 
     initFilterTypeSelect()
     {
-        const selectElement = this.querySelector('#filterTypeSelect');
+        const selectElement = this.shadowRoot.querySelector('#filterTypeSelect');
         
         // Populate filter type list
         Object.entries(filterTypeNames).forEach(([key, name]) => {
@@ -667,7 +702,7 @@ class test_View extends HTMLElement
     initSynthWheels()
     {
         // Initialize Pitch Bend Wheel
-        const pitchBendCanvas = this.querySelector('#pitchBendWheel');
+        const pitchBendCanvas = this.shadowRoot.querySelector('#pitchBendWheel');
         if (pitchBendCanvas) {
             this.pitchBendWheel = new SynthWheel(pitchBendCanvas, {
                 label: 'Pitch Bend',
@@ -677,7 +712,7 @@ class test_View extends HTMLElement
         }
 
         // Initialize Mod Wheel
-        const modWheelCanvas = this.querySelector('#modWheelWheel');
+        const modWheelCanvas = this.shadowRoot.querySelector('#modWheelWheel');
         if (modWheelCanvas) {
             this.modWheelWheel = new SynthWheel(modWheelCanvas, {
                 label: 'Mod Wheel',
@@ -706,11 +741,12 @@ class test_View extends HTMLElement
 
     initKeyboard()
     {
-        this.keyboardElement = this.querySelector("#Keyboard");
+        this.keyboardElement = this.shadowRoot.querySelector("#Keyboard");
         
         if (this.keyboardElement) {
             this.keyboardElement.addEventListener("note-down", (note) => this.sendNoteOnOffToPatch (note.detail.note, true));
             this.keyboardElement.addEventListener("note-up",   (note) => this.sendNoteOnOffToPatch (note.detail.note, false));
+
             this.patchConnection.addEndpointListener ("midiIn", message => {
                 this.keyboardElement.handleExternalMIDI (message.message);
             });
@@ -727,7 +763,7 @@ class test_View extends HTMLElement
     updateCurrentNoteDisplay(noteName)
     {
         if (!this.noteDisplay) {
-            this.noteDisplay = this.querySelector('#currentNoteDisplay');
+            this.noteDisplay = this.shadowRoot.querySelector('#currentNoteDisplay');
         }
         if (this.noteDisplay) {
             this.noteDisplay.textContent = noteName || '—';
@@ -737,8 +773,8 @@ class test_View extends HTMLElement
     initMatrixRows()
     {
         // Get both matrix grids - left (rows 1-4) and right (rows 5-8)
-        const leftMatrixGrid = this.querySelector('.matrix-column-left .matrix-grid');
-        const rightMatrixGrid = this.querySelector('.matrix-column-right .matrix-grid');
+        const leftMatrixGrid = this.shadowRoot.querySelector('.matrix-column-left .matrix-grid');
+        const rightMatrixGrid = this.shadowRoot.querySelector('.matrix-column-right .matrix-grid');
         
         // Create UI elements for each of the 8 rows
         for (let i = 0; i < 8; i++) {
@@ -965,7 +1001,7 @@ class test_View extends HTMLElement
                 const { rowIndex, destIndex } = sourceData;
                 const rowNum = rowIndex + 1;
                 const selectId = destIndex === 1 ? `mtx-dest1-${rowIndex}` : `mtx-dest2-${rowIndex}`;
-                const destSelect = this.querySelector(`#${selectId}`);
+                const destSelect = this.shadowRoot.querySelector(`#${selectId}`);
                 if (destSelect) {
                     destSelect.value = resolvedValue;
                     destSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -990,31 +1026,27 @@ function registerCustomElement (name, element)
 }
 
 //==============================================================================
-let midiKeyboard;
-
+let midiKeyboard = null;
 function defineKeyboardElement (patchConnection)
 {
     if (!midiKeyboard)
     {
-        midiKeyboard = class extends patchConnection.utilities.PianoKeyboard
+        /*
+        const midiKeyboard1 = class extends patchConnection.utilities.PianoKeyboard
         {
             constructor()
             {
-                super ({ naturalNoteWidth: 18.58,
-                        accidentalWidth: 11,
-                        accidentalPercentageHeight: 62,
-                        pressedNoteColour: "#00000044" });
+                super ();
             }
-        }
+        };
 
-/*
         const midiKeyboardHTML = `
             <div style="width:300px; height: 120px; margin: 20px auto; background-color: #F00; border-radius: 8px; padding: 10px; box-sizing: border-box;">
                 <span style="color: #FFF; font-weight: bold;">MIDI Keyboard</span>
             </div>
         `;
 
-        midiKeyboard = class extends HTMLElement
+        midiKeyboard2 = class extends HTMLElement
         {
             constructor()
             {
@@ -1022,11 +1054,15 @@ function defineKeyboardElement (patchConnection)
                 this.attachShadow({ mode: 'open' });
                 this.shadowRoot.innerHTML = midiKeyboardHTML;
             }
-        }
+        };
 */
-
-        registerCustomElement ("midi-keyboard", patchConnection.utilities.PianoKeyboard);
-        console.log("MIDI Keyboard element defined");
+        try {
+            midiKeyboard = patchConnection.utilities.PianoKeyboard;
+            registerCustomElement ("midi-keyboard", midiKeyboard);
+            console.log("MIDI Keyboard element defined");
+        } catch (e) {
+            console.error("Error defining MIDI Keyboard element:", e);
+        }
     }
 }
 
@@ -1040,6 +1076,7 @@ function defineKeyboardElement (patchConnection)
 */
 export default function createPatchView (patchConnection)
 {    
+    console.log("Creating patch view with connection:", patchConnection);
     defineKeyboardElement(patchConnection);
     return new test_View (patchConnection);
 }

@@ -758,6 +758,13 @@ select option {
 }
 
 
+.midi-keyboard-row {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    margin-top: 10px;
+}
+
 .midi-keyboard-container {
     margin-top: 10px;
     width: 100%;
