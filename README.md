@@ -12,6 +12,8 @@ A 16-voice polyphonic synthesizer patch built with [Cmajor](https://cmajor.dev).
 - **MIDI Support** – 16-note polyphony with MPE (MIDI Polyphonic Expression) compatibility
 - **Web-based UI** – responsive, interactive controls including rotary knobs, sliders, and visual editors for envelopes and LFOs
 
+![FirstSynth UI Screenshot](images/FirstSynth.png)
+
 ## Project Structure
 
 ```
