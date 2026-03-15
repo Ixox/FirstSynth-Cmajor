@@ -1,6 +1,10 @@
 # FirstSynth
 
-A 16-voice polyphonic synthesizer patch built with [Cmajor](https://cmajor.dev).
+I created this synth as a learning project for the [Cmajor](https://cmajor.dev) language.
+
+It's a 16-voice polyphonic subtractive synthesizer featuring classic synthesis tools: 
+low/high/bandpass filters, 3 oscillators, saturators, matrix modulation, chorus effects, 
+LFOs, and envelope generators. The interface is built with HTML, CSS, and JavaScript.
 
 ## Features
 
@@ -48,4 +52,4 @@ worker/
 
 ---
 
-*Version 0.1 • Manufacturer: Ixox*
+*Xavier Hosxe*
